@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <base target="_top">
+    <meta charset="utf-8">
+    <?!= include('Styles') ?>
+  </head>
+  <body>
+    <div id="test-banner" class="test-banner" hidden></div>
+    <header class="banner">
+      <h1>MENU</h1>
+      <p id="range" class="range"></p>
+    </header>
+    <main>
+      <p id="error" class="error" hidden></p>
+      <section id="week" class="week" aria-live="polite"></section>
+      <section id="counts" class="counts" hidden>
+        <h2>Lunch counts</h2>
+        <div class="table-wrap"><table id="counts-table"></table></div>
+      </section>
+    </main>
+    <div id="toast" class="toast" role="status" hidden></div>
+    <script>var INITIAL = <?!= initialJson ?>;</script>
+    <?!= include('Script') ?>
+  </body>
+</html>

@@ -1,0 +1,9 @@
+{
+  "name": "lunch-menu-page",
+  "private": true,
+  "description": "Weekly lunch menu and meal counts – Google Apps Script web app",
+  "scripts": {
+    "test": "node --test test/*.test.js && node scripts/check-readonly.js",
+    "push": "npm test && clasp push"
+  }
+}

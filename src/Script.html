@@ -1,0 +1,209 @@
+<script>
+(function () {
+  var MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July',
+    'August', 'September', 'October', 'November', 'December'];
+  var VN_OFFSET_MS = 7 * 3600 * 1000;
+
+  var data = INITIAL;
+  var receivedAt = Date.now();
+  var refreshTimer = null;
+  var pending = {};
+
+  var HEART = '<svg viewBox="0 0 24 24" aria-hidden="true"><path class="fill" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" d="M12 20.5s-7.5-4.6-9.3-9.2C1.5 8.2 3.4 4.5 7 4.5c2.1 0 3.6 1.2 5 3 1.4-1.8 2.9-3 5-3 3.6 0 5.5 3.7 4.3 6.8-1.8 4.6-9.3 9.2-9.3 9.2z"/></svg>';
+  var DISLIKE = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle class="fill" cx="12" cy="12" r="10.2" fill="none" stroke="currentColor" stroke-width="1.6"/><path fill="none" stroke="#1e2732" stroke-width="1.6" stroke-linejoin="round" d="M12 17s-4.4-2.7-5.4-5.3C5.9 9.9 7 7.8 9 7.8c1.2 0 2.1.7 3 1.7.9-1 1.8-1.7 3-1.7 2 0 3.1 2.1 2.4 3.9C16.4 14.3 12 17 12 17z"/><path stroke="currentColor" stroke-width="1.6" d="M5 19L19 5"/></svg>';
+
+  function $(id) { return document.getElementById(id); }
+  function el(tag, cls, text) {
+    var n = document.createElement(tag);
+    if (cls) n.className = cls;
+    if (text != null) n.textContent = text;
+    return n;
+  }
+  function pad2(n) { return (n < 10 ? '0' : '') + n; }
+
+  function effectiveNow() { return data.nowMs + (Date.now() - receivedAt); }
+
+  // Same format as ?now= (Vietnam local), so a test clock keeps running across calls.
+  function formatVnLocal(ms) {
+    var d = new Date(ms + VN_OFFSET_MS);
+    return d.getUTCFullYear() + '-' + pad2(d.getUTCMonth() + 1) + '-' + pad2(d.getUTCDate()) + 'T' +
+      pad2(d.getUTCHours()) + ':' + pad2(d.getUTCMinutes()) + ':' + pad2(d.getUTCSeconds());
+  }
+  function nowParam() { return data.testMode ? formatVnLocal(effectiveNow()) : ''; }
+
+  function shortDate(key) { return key.slice(8, 10) + '.' + key.slice(5, 7); }
+  function ordinal(n) {
+    var s = (n % 100 >= 11 && n % 100 <= 13) ? 'th' : ({ 1: 'st', 2: 'nd', 3: 'rd' }[n % 10] || 'th');
+    return n + s;
+  }
+  function longDate(card) {
+    return card.weekday + ', ' + MONTHS[+card.date.slice(5, 7) - 1] + ' ' + ordinal(+card.date.slice(8, 10));
+  }
+
+  function toast(msg) {
+    var t = $('toast');
+    t.textContent = msg;
+    t.hidden = false;
+    clearTimeout(toast.timer);
+    toast.timer = setTimeout(function () { t.hidden = true; }, 4000);
+  }
+
+  function render() {
+    if (data.error) {
+      $('error').textContent = data.error;
+      $('error').hidden = false;
+      return;
+    }
+    $('error').hidden = true;
+    $('range').textContent = shortDate(data.monday) + ' - ' + shortDate(data.friday);
+    renderTestBanner();
+
+    var week = $('week');
+    week.textContent = '';
+    data.days.forEach(function (card) { week.appendChild(renderDay(card)); });
+
+    if (data.isAdmin && data.locations) renderCounts();
+    else $('counts').hidden = true;
+  }
+
+  function renderTestBanner() {
+    var b = $('test-banner');
+    b.hidden = !data.testMode;
+    if (data.testMode) b.textContent = 'Test time (Vietnam): ' + formatVnLocal(effectiveNow()).replace('T', ' ') + ' · test votes are saved separately';
+  }
+
+  function renderDay(card) {
+    var day = el('article', 'day' + (card.state.highlighted ? ' today' : '') + (card.state.faded ? ' faded' : ''));
+    day.setAttribute('aria-label', longDate(card));
+    var box = el('div', 'card');
+
+    box.appendChild(renderImage(card.image));
+    box.appendChild(el('div', 'weekday-number', String(card.weekdayNumber)));
+    box.appendChild(el('div', 'weekday-name', card.weekday));
+
+    if (card.holiday) {
+      box.appendChild(el('div', 'holiday-name', card.holiday.name || 'Holiday'));
+    } else if (!card.dishes.length) {
+      box.appendChild(el('p', 'notice', 'Menu is coming...'));
+    } else {
+      var ul = el('ul', 'dishes');
+      card.dishes.forEach(function (d) { ul.appendChild(el('li', d.main ? 'main' : '', d.name)); });
+      box.appendChild(ul);
+    }
+    day.appendChild(box);
+
+    var canVote = card.state.vote === 'open' && !card.holiday && !pending[card.date];
+    var votes = el('div', 'votes');
+    votes.appendChild(voteButton(card, 'like', HEART, card.votes.like, canVote));
+    votes.appendChild(voteButton(card, 'dislike', DISLIKE, card.votes.dislike, canVote));
+    day.appendChild(votes);
+
+    day.appendChild(el('div', 'date', longDate(card)));
+    return day;
+  }
+
+  function renderImage(image) {
+    var slot = el('div', 'img-slot');
+    if (image && image.url) {
+      var img = document.createElement('img');
+      img.src = image.url;
+      img.alt = image.name || 'Holiday';
+      slot.className += ' has-img';
+      slot.appendChild(img);
+    } else {
+      slot.textContent = image ? (image.kind === 'holiday' ? 'Holiday image' : 'Image coming soon') : '';
+      slot.setAttribute('aria-hidden', 'true');
+    }
+    return slot;
+  }
+
+  function voteButton(card, kind, icon, count, enabled) {
+    var b = el('button', 'vote-btn ' + kind + (card.votes.mine === kind ? ' active' : ''));
+    b.type = 'button';
+    b.disabled = !enabled;
+    b.setAttribute('aria-pressed', card.votes.mine === kind ? 'true' : 'false');
+    b.setAttribute('aria-label', (kind === 'like' ? 'Like ' : 'Dislike ') + card.weekday + ' (' + count + ')');
+    var num = el('span', 'count', String(count));
+    if (kind === 'like') { b.innerHTML = icon; b.appendChild(num); }
+    else { b.appendChild(num); b.insertAdjacentHTML('beforeend', icon); }
+    b.addEventListener('click', function () { castVote(card, kind); });
+    return b;
+  }
+
+  function renderCounts() {
+    var table = $('counts-table');
+    table.textContent = '';
+    var head = el('thead'), hr = el('tr');
+    hr.appendChild(el('th', '', 'Location'));
+    data.days.forEach(function (c) { hr.appendChild(el('th', '', c.weekday.slice(0, 3) + ' ' + shortDate(c.date))); });
+    head.appendChild(hr);
+    table.appendChild(head);
+
+    var body = el('tbody');
+    data.locations.forEach(function (loc) {
+      var tr = el('tr');
+      tr.appendChild(el('td', '', loc.name));
+      data.days.forEach(function (c) { tr.appendChild(el('td', '', fmt(c.counts && c.counts[loc.id]))); });
+      body.appendChild(tr);
+    });
+    var total = el('tr', 'total');
+    total.appendChild(el('td', '', 'Total'));
+    data.days.forEach(function (c) { total.appendChild(el('td', '', fmt(c.total))); });
+    body.appendChild(total);
+    table.appendChild(body);
+    $('counts').hidden = false;
+  }
+  function fmt(n) { return n == null ? '' : String(n); }
+
+  function castVote(card, kind) {
+    if (pending[card.date]) return;
+    pending[card.date] = true;
+    render();
+    google.script.run
+      .withSuccessHandler(function (tally) {
+        delete pending[card.date];
+        data.days.forEach(function (c) { if (c.date === card.date) c.votes = tally; });
+        render();
+      })
+      .withFailureHandler(function (err) {
+        delete pending[card.date];
+        toast(err && err.message ? err.message : 'Your vote could not be saved.');
+        refresh();
+      })
+      .vote(card.date, kind, nowParam());
+  }
+
+  // AC2/AC19: the week, fading and voting change at 11:00, so refresh then.
+  function refresh() {
+    google.script.run
+      .withSuccessHandler(function (week) {
+        data = week;
+        receivedAt = Date.now();
+        render();
+        scheduleRefresh();
+      })
+      .withFailureHandler(function (err) {
+        toast('Could not refresh: ' + (err && err.message ? err.message : 'network error'));
+        clearTimeout(refreshTimer);
+        refreshTimer = setTimeout(refresh, 60000);
+      })
+      .getWeek(nowParam());
+  }
+
+  function scheduleRefresh() {
+    clearTimeout(refreshTimer);
+    if (data.error) return;
+    var wait = Math.max(0, data.nextRefreshMs - effectiveNow()) + 1000;
+    refreshTimer = setTimeout(refresh, Math.min(wait, 0x7fffffff));
+  }
+
+  // Timers can sleep with the laptop; catch up when the tab is shown again.
+  document.addEventListener('visibilitychange', function () {
+    if (!document.hidden && !data.error && effectiveNow() >= data.nextRefreshMs) refresh();
+  });
+  setInterval(function () { if (data.testMode) renderTestBanner(); }, 1000);
+
+  render();
+  scheduleRefresh();
+})();
+</script>
