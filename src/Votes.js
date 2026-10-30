@@ -1,6 +1,7 @@
 /**
  * Like/dislike votes (AC16), stored in the separate "Lunch Menu Votes" sheet.
  * One row per (date, email, isTest); vote is 'like', 'dislike' or '' (withdrawn).
+ * Matching and counting rules live in Logic.js (findVoteRow, planVote, tallyVotes).
  */
 
 var VOTE_HEADERS = ['date', 'email', 'vote', 'isTest', 'updatedAt'];
@@ -28,36 +29,31 @@ function votesSheet_() {
   }
 }
 
+/**
+ * Reads all vote rows. The date cell may hold text or, if Sheets converted it,
+ * a real date; both become "YYYY-MM-DD".
+ */
 function readVoteRows_(sheet) {
   var last = sheet.getLastRow();
   if (last < 2) return [];
-  return sheet.getRange(2, 1, last - 1, VOTE_HEADERS.length).getValues().map(function (r, i) {
-    return {
+  var range = sheet.getRange(2, 1, last - 1, VOTE_HEADERS.length);
+  var values = range.getValues();
+  var shown = range.getDisplayValues();
+  var tz = sheet.getParent().getSpreadsheetTimeZone();
+  var rows = [];
+  values.forEach(function (r, i) {
+    var dateCell = r[0] instanceof Date ? Utilities.formatDate(r[0], tz, 'yyyy-MM-dd') : shown[i][0];
+    var date = voteDateKey(dateCell);
+    if (!date) return;
+    rows.push({
       rowNumber: i + 2,
-      date: String(r[0]),
-      email: String(r[1]).toLowerCase(),
-      vote: String(r[2]),
+      date: date,
+      email: String(r[1]).trim().toLowerCase(),
+      vote: String(r[2]).trim(),
       isTest: String(r[3]).toUpperCase() === 'TRUE'
-    };
+    });
   });
-}
-
-/**
- * { dateKey: { like, dislike, mine } } for the given days. Test votes are only
- * counted while the admin is in test mode; "mine" comes from the matching kind.
- */
-function tallyVotes_(rows, days, email, testMode) {
-  var out = {};
-  days.forEach(function (d) { out[d] = { like: 0, dislike: 0, mine: '' }; });
-  rows.forEach(function (r) {
-    var t = out[r.date];
-    if (!t) return;
-    if (r.isTest && !testMode) return;
-    if (r.vote === 'like') t.like++;
-    if (r.vote === 'dislike') t.dislike++;
-    if (r.email === email && r.isTest === testMode) t.mine = r.vote;
-  });
-  return out;
+  return rows;
 }
 
 /** Applies a click and returns the new tally for that day. Caller checks the window. */
@@ -67,20 +63,18 @@ function applyVote_(dateKey, email, clicked, testMode) {
   lock.waitLock(20000);
   try {
     var rows = readVoteRows_(sheet);
-    var existing = null;
-    for (var i = 0; i < rows.length; i++) {
-      var r = rows[i];
-      if (r.date === dateKey && r.email === email && r.isTest === testMode) { existing = r; break; }
-    }
-    var next = nextVote(existing ? existing.vote : '', clicked);
-    if (existing) {
-      sheet.getRange(existing.rowNumber, 3, 1, 3).setValues([[next, testMode, new Date()]]);
-      existing.vote = next;
+    var plan = planVote(rows, dateKey, email, testMode, clicked);
+    if (plan.action === 'update') {
+      sheet.getRange(plan.rowNumber, 3, 1, 3).setValues([[plan.vote, testMode, new Date()]]);
+      findVoteRow(rows, dateKey, email, testMode).vote = plan.vote;
     } else {
-      sheet.appendRow([dateKey, email, next, testMode, new Date()]);
-      rows.push({ date: dateKey, email: email, vote: next, isTest: testMode });
+      // Not appendRow(): it ignores the text format and turns the date key into a date.
+      var row = sheet.getLastRow() + 1;
+      sheet.getRange(row, 1, 1, 2).setNumberFormat('@');
+      sheet.getRange(row, 1, 1, VOTE_HEADERS.length).setValues([[dateKey, email, plan.vote, testMode, new Date()]]);
+      rows.push({ rowNumber: row, date: dateKey, email: email, vote: plan.vote, isTest: testMode });
     }
-    return tallyVotes_(rows, [dateKey], email, testMode)[dateKey];
+    return tallyVotes(rows, [dateKey], email, testMode)[dateKey];
   } finally {
     lock.releaseLock();
   }

@@ -70,7 +70,7 @@ function buildWeek_(email, clock) {
   var monday = weekMonday(clock.ms);
   var days = weekDays(monday);
   var cache = {};
-  var votes = tallyVotes_(readVoteRows_(votesSheet_()), days, email, clock.test);
+  var votes = tallyVotes(readVoteRows_(votesSheet_()), days, email, clock.test);
 
   var cards = days.map(function (dateKey) {
     var menu = readMenuMonth_(dateKey, cache)[dateKey] || { dishes: [], holiday: null };

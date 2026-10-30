@@ -142,6 +142,29 @@ test('sign-up: decomposed Vietnamese label still matches', () => {
   assert.equal(s[2].home, 15);
 });
 
+test('vote date cells: text, converted dates and dd/mm/yyyy all match', () => {
+  assert.equal(L.voteDateKey('2026-11-02'), '2026-11-02');
+  assert.equal(L.voteDateKey(' 2026-11-2 '), '2026-11-02');
+  assert.equal(L.voteDateKey('02/11/2026'), '2026-11-02');
+  assert.equal(L.voteDateKey('Mon Nov 02 2026 00:00:00 GMT+0700'), null);
+  assert.equal(L.voteDateKey(''), null);
+});
+
+test('one vote per user per day: last row wins, duplicates are not counted (AC16)', () => {
+  const r = (n, date, email, vote, isTest) => ({ rowNumber: n, date, email, vote, isTest });
+  const rows = [
+    r(2, '2026-11-02', 'a@x', 'like', false),
+    r(3, '2026-11-02', 'a@x', 'like', false),
+    r(4, '2026-11-02', 'a@x', 'dislike', false),
+    r(5, '2026-11-02', 'b@x', 'like', false),
+    r(6, '2026-11-02', 'a@x', 'like', true)
+  ];
+  assert.deepEqual(L.tallyVotes(rows, ['2026-11-02'], 'a@x', false)['2026-11-02'], { like: 1, dislike: 1, mine: 'dislike' });
+  assert.deepEqual(L.tallyVotes(rows, ['2026-11-02'], 'a@x', true)['2026-11-02'], { like: 2, dislike: 1, mine: 'like' });
+  assert.deepEqual(L.planVote(rows, '2026-11-02', 'a@x', false, 'dislike'), { action: 'update', rowNumber: 4, vote: '' });
+  assert.deepEqual(L.planVote(rows, '2026-11-02', 'c@x', false, 'like'), { action: 'append', vote: 'like' });
+});
+
 test('vote toggling (AC16)', () => {
   assert.equal(L.nextVote('', 'like'), 'like');
   assert.equal(L.nextVote('like', 'like'), '');

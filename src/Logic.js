@@ -264,6 +264,67 @@ function nextVote(current, clicked) {
   return current === clicked ? '' : clicked;
 }
 
+/**
+ * Normalises a votes-sheet date cell to a date key. Sheets may turn the text
+ * "2026-11-02" into a real date, so the caller passes that cell's display
+ * value (or a "YYYY-MM-DD" string it formatted from a Date). "dd/mm/yyyy" is
+ * accepted too.
+ */
+function voteDateKey(cell) {
+  var s = String(cell == null ? '' : cell).trim();
+  var m = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(s);
+  if (m) {
+    var key = m[1] + '-' + pad2_(+m[2]) + '-' + pad2_(+m[3]);
+    return isDateKey(key) ? key : null;
+  }
+  return parseSheetDate(s);
+}
+
+/**
+ * The row that holds a user's vote for a day: the last matching row, so older
+ * duplicate rows (from before this rule) are ignored rather than counted.
+ */
+function findVoteRow(rows, dateKey, email, isTest) {
+  for (var i = rows.length - 1; i >= 0; i--) {
+    var r = rows[i];
+    if (r.date === dateKey && r.email === email && r.isTest === isTest) return r;
+  }
+  return null;
+}
+
+/**
+ * What a click does to the votes sheet (AC16): update the user's existing row
+ * for that day, or append one if there is none. Never more than one row.
+ */
+function planVote(rows, dateKey, email, isTest, clicked) {
+  var existing = findVoteRow(rows, dateKey, email, isTest);
+  var vote = nextVote(existing ? existing.vote : '', clicked);
+  return existing
+    ? { action: 'update', rowNumber: existing.rowNumber, vote: vote }
+    : { action: 'append', vote: vote };
+}
+
+/**
+ * { dateKey: { like, dislike, mine } } for the given days. One vote per
+ * (date, email, isTest): the last row wins. Test votes are only counted in
+ * test mode; "mine" comes from the user's row of the current kind.
+ */
+function tallyVotes(rows, days, email, testMode) {
+  var out = {}, latest = {};
+  days.forEach(function (d) { out[d] = { like: 0, dislike: 0, mine: '' }; });
+  rows.forEach(function (r) {
+    if (out[r.date]) latest[r.date + '|' + r.email + '|' + r.isTest] = r;
+  });
+  Object.keys(latest).forEach(function (k) {
+    var r = latest[k], t = out[r.date];
+    if (r.isTest && !testMode) return;
+    if (r.vote === 'like') t.like++;
+    if (r.vote === 'dislike') t.dislike++;
+    if (r.email === email && r.isTest === testMode) t.mine = r.vote;
+  });
+  return out;
+}
+
 if (typeof module !== 'undefined') {
   module.exports = {
     vnParts: vnParts, dateKeyOf: dateKeyOf, vnInstant: vnInstant, addDays: addDays, isDateKey: isDateKey,
@@ -271,6 +332,7 @@ if (typeof module !== 'undefined') {
     voteWindow: voteWindow, voteStatus: voteStatus, dayState: dayState, nextBoundary: nextBoundary,
     menuTabName: menuTabName, signupTabName: signupTabName, normalizeLabel: normalizeLabel,
     parseSheetDate: parseSheetDate, parseMenu: parseMenu, parseSignup: parseSignup, dailyTotal: dailyTotal,
-    nextVote: nextVote, LOCATIONS: LOCATIONS
+    nextVote: nextVote, voteDateKey: voteDateKey, findVoteRow: findVoteRow, planVote: planVote,
+    tallyVotes: tallyVotes, LOCATIONS: LOCATIONS
   };
 }
