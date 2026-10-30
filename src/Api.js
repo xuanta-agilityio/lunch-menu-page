@@ -110,5 +110,8 @@ function buildWeek_(email, clock) {
 }
 
 function safeJson_(obj) {
-  return JSON.stringify(obj).replace(/</g, '\\u003c').replace(/ /g, '\\u2028').replace(/ /g, '\\u2029');
+  // Escape "<" and the JS line separators U+2028/U+2029 so the JSON is safe inside <script>.
+  return JSON.stringify(obj).replace(/</g, '\\u003c')
+    .replace(/\u2028/g, '\\u2028')
+    .replace(/\u2029/g, '\\u2029');
 }

@@ -30,11 +30,14 @@ npm test
 clasp push
 ```
 
-`npm run push` runs the tests first and pushes only if they pass. To release a new version, update the existing deployment so the URL stays the same:
+On Windows PowerShell, call clasp as `clasp.cmd`: the script policy blocks the `clasp.ps1` wrapper. `npm run push` runs the tests first and pushes only if they pass. Pushing updates the editor copy only. Users see the change after you update the existing deployment, which keeps the URL the same:
 
 ```bash
-clasp deploy -i <deploymentId> -d "describe the change"
+clasp update-deployment AKfycbyZF5Mp6olm3c0PCO553KsXiSxxJ4bXAz4kmLdGdv1L0ExIIZsc49x3cUNl-2NakmFX -d "describe the change"
 ```
+
+- Script project: https://script.google.com/d/1Srn5pfcQcqbUBJD2wT7983YSJlNWPWUZ4gSVM2cyfH_z6N1Xialu9bRM/edit
+- Web app: https://script.google.com/a/macros/asnet.com.vn/s/AKfycbyZF5Mp6olm3c0PCO553KsXiSxxJ4bXAz4kmLdGdv1L0ExIIZsc49x3cUNl-2NakmFX/exec
 
 ## Images
 

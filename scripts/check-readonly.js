@@ -23,6 +23,16 @@ for (const f of files) {
   }
 }
 
+// Apps Script rejects a push with any syntax error, so catch it here first.
+const vm = require('vm');
+for (const f of files) {
+  try {
+    new vm.Script(fs.readFileSync(path.join(src, f), 'utf8'), { filename: f });
+  } catch (e) {
+    errors.push(`${f}: ${e.message}`);
+  }
+}
+
 if (errors.length) {
   console.error('Read-only check failed:\n  ' + errors.join('\n  '));
   process.exit(1);
