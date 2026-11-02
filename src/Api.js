@@ -71,10 +71,16 @@ function buildWeek_(email, clock) {
   var days = weekDays(monday);
   var cache = {};
   var votes = tallyVotes(readVoteRows_(votesSheet_()), days, email, clock.test);
+  var menus = days.map(function (dateKey) {
+    return readMenuMonth_(dateKey, cache)[dateKey] || { dishes: [], holiday: null };
+  });
+  var mainOf = function (menu) { return menu.dishes.filter(function (d) { return d.main; })[0] || null; };
+  var dishImages = dishImageUrls_(menus.filter(function (m) { return !m.holiday && mainOf(m); })
+    .map(function (m) { return mainOf(m).name; }));
 
-  var cards = days.map(function (dateKey) {
-    var menu = readMenuMonth_(dateKey, cache)[dateKey] || { dishes: [], holiday: null };
-    var main = menu.dishes.filter(function (d) { return d.main; })[0] || null;
+  var cards = days.map(function (dateKey, i) {
+    var menu = menus[i];
+    var main = mainOf(menu);
     var dow = vnParts(vnInstant(dateKey, 12)).dow;
     var card = {
       date: dateKey,
@@ -84,7 +90,7 @@ function buildWeek_(email, clock) {
       holiday: menu.holiday,
       image: menu.holiday
         ? { kind: 'holiday', name: menu.holiday.name, url: IMAGES.holidays[normalizeLabel(menu.holiday.name)] || null }
-        : main ? { kind: 'dish', name: main.name, url: IMAGES.dishes[normalizeLabel(main.name)] || null } : null,
+        : main ? { kind: 'dish', name: main.name, url: dishImages[main.name] || null } : null,
       state: dayState(dateKey, clock.ms),
       votes: votes[dateKey]
     };

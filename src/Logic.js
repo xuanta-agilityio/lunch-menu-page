@@ -325,6 +325,43 @@ function tallyVotes(rows, days, email, testMode) {
   return out;
 }
 
+var IMAGE_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
+
+/** Dish name → match key: no accents, lower case, words separated by single spaces. */
+function dishImageKey(name) {
+  return String(name == null ? '' : name)
+    .normalize('NFD')
+    .replace(/\p{M}+/gu, '')
+    .toLowerCase()
+    .replace(/đ/g, 'd')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+}
+
+/** "02-11_Ca-chien-mam-xoai.jpg" → "ca chien mam xoai" (date prefix and extension ignored). */
+function imageFileKey(fileName) {
+  return dishImageKey(String(fileName == null ? '' : fileName)
+    .replace(/\.[a-z0-9]+$/i, '')
+    .replace(/^\s*\d{1,2}-\d{1,2}[\s_-]+/, ''));
+}
+
+/**
+ * [{ id, name, mimeType, updated }] → { matchKey: { id, updated } }. Non-images
+ * are skipped. A repeated dish keeps the first file by name, so the choice is stable.
+ */
+function buildImageIndex(files) {
+  var index = {};
+  files.slice().sort(function (a, b) {
+    return a.name < b.name ? -1 : a.name > b.name ? 1 : 0;
+  }).forEach(function (f) {
+    var key = imageFileKey(f.name);
+    if (key && IMAGE_MIME_TYPES.indexOf(f.mimeType) >= 0 && !index[key]) {
+      index[key] = { id: f.id, updated: f.updated };
+    }
+  });
+  return index;
+}
+
 if (typeof module !== 'undefined') {
   module.exports = {
     vnParts: vnParts, dateKeyOf: dateKeyOf, vnInstant: vnInstant, addDays: addDays, isDateKey: isDateKey,
@@ -333,6 +370,7 @@ if (typeof module !== 'undefined') {
     menuTabName: menuTabName, signupTabName: signupTabName, normalizeLabel: normalizeLabel,
     parseSheetDate: parseSheetDate, parseMenu: parseMenu, parseSignup: parseSignup, dailyTotal: dailyTotal,
     nextVote: nextVote, voteDateKey: voteDateKey, findVoteRow: findVoteRow, planVote: planVote,
-    tallyVotes: tallyVotes, LOCATIONS: LOCATIONS
+    tallyVotes: tallyVotes, dishImageKey: dishImageKey, imageFileKey: imageFileKey,
+    buildImageIndex: buildImageIndex, LOCATIONS: LOCATIONS
   };
 }

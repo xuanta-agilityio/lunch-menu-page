@@ -8,15 +8,16 @@ var CONFIG = {
 
   // Votes live in a separate sheet, created on first use in the owner's My Drive.
   VOTES_SHEET_TITLE: 'Lunch Menu Votes',
-  VOTES_SHEET_PROPERTY: 'VOTES_SHEET_ID'
+  VOTES_SHEET_PROPERTY: 'VOTES_SHEET_ID',
+
+  // Private Drive folder with the main-dish images, "DD-MM_Dish-name.jpg" (AC13).
+  DISH_IMAGES_FOLDER_ID: '1V5qINYcDER4GHPmWbEPW2jo5HG0GEQVE'
 };
 
 /**
- * Image slots (AC13, AC14). Keys are names as normalizeLabel() returns them
+ * Holiday image slots (AC14). Keys are names as normalizeLabel() returns them
  * (lower case, single spaces), values are image URLs. Empty → placeholder.
- * Example: 'cá chiên mắm xoài': 'https://…/ca-chien-mam-xoai.png'
  */
 var IMAGES = {
-  dishes: {},
   holidays: {}
 };

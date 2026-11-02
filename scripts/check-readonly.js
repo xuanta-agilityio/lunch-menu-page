@@ -1,6 +1,6 @@
 // AC11 guard: the source sheets must never be written to.
 // - Only SourceSheets.js may mention the source sheet IDs (besides Config.js).
-// - SourceSheets.js may not call any write method.
+// - SourceSheets.js and Images.js (the Drive image folder) may not call any write method.
 const fs = require('fs');
 const path = require('path');
 
@@ -9,11 +9,12 @@ const files = fs.readdirSync(src).filter((f) => f.endsWith('.js'));
 const errors = [];
 
 const WRITE_CALL = /\.(set\w*|append\w*|insert\w*|delete\w*|clear\w*|copyTo|moveTo|sort|merge\w*|protect|hide\w*|show\w*|add\w*|remove\w*|create\w*|flush)\s*\(/;
-const sourceFile = fs.readFileSync(path.join(src, 'SourceSheets.js'), 'utf8');
-sourceFile.split('\n').forEach((line, i) => {
-  const code = line.replace(/\/\/.*$/, '');
-  if (WRITE_CALL.test(code)) errors.push(`SourceSheets.js:${i + 1} looks like a write: ${line.trim()}`);
-});
+for (const readOnlyFile of ['SourceSheets.js', 'Images.js']) {
+  fs.readFileSync(path.join(src, readOnlyFile), 'utf8').split('\n').forEach((line, i) => {
+    const code = line.replace(/\/\/.*$/, '');
+    if (WRITE_CALL.test(code)) errors.push(`${readOnlyFile}:${i + 1} looks like a write: ${line.trim()}`);
+  });
+}
 
 for (const f of files) {
   if (f === 'Config.js' || f === 'SourceSheets.js') continue;
@@ -37,4 +38,4 @@ if (errors.length) {
   console.error('Read-only check failed:\n  ' + errors.join('\n  '));
   process.exit(1);
 }
-console.log('Read-only check passed: source sheets are only read in SourceSheets.js.');
+console.log('Read-only check passed: SourceSheets.js and Images.js only read.');

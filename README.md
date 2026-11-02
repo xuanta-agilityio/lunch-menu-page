@@ -15,6 +15,7 @@ A Google Apps Script web app that shows one working week (Mon–Fri) of the lunc
 | `src/Logic.js` | Pure logic: week choice, voting windows, sheet parsing. Shared with the Node tests. |
 | `src/Config.js` | Sheet IDs, admin, domain, and the image URL maps. |
 | `src/SourceSheets.js` | Read-only access to the two source sheets. |
+| `src/Images.js` | Reads main-dish images from the private Drive folder, as cached data URIs. |
 | `src/Votes.js` | The votes sheet: create, read, toggle a vote (under a script lock). |
 | `src/Api.js` | `doGet`, `getWeek`, `vote`, and the admin check. |
 | `src/Index.html`, `Styles.html`, `Script.html` | The page. |
@@ -41,7 +42,11 @@ clasp update-deployment AKfycbyZF5Mp6olm3c0PCO553KsXiSxxJ4bXAz4kmLdGdv1L0ExIIZsc
 
 ## Images
 
-Each main dish and holiday has an image slot. Until an image is added, the slot shows a placeholder. To add images, fill `IMAGES.dishes` / `IMAGES.holidays` in [src/Config.js](src/Config.js). The keys are the dish or holiday name in lower case with single spaces, and the values are image URLs.
+Each main dish and holiday has an image slot, which shows a placeholder when there is no image.
+
+- **Main dishes:** add a JPG, PNG or WebP to the private Drive folder `CONFIG.DISH_IMAGES_FOLDER_ID`, named `DD-MM_Dish-name.jpg`. Files match the main dish by name, ignoring the date prefix, accents and case, so a repeated dish reuses its image. If two files match, the first by file name is used. No redeploy is needed: a new file appears within about 10 minutes, and a changed file gets picked up the same way.
+- **How they reach the page:** [src/Images.js](src/Images.js) reads Drive's thumbnail (or the original if it's 120 KB or less and has no thumbnail) and sends it as a data URI. Nothing is made public. Results are cached for up to 6 hours. If Drive fails, the page still loads with placeholders and the error goes to the Apps Script executions log.
+- **Holidays:** fill `IMAGES.holidays` in [src/Config.js](src/Config.js). The keys are the holiday name in lower case with single spaces, and the values are image URLs.
 
 ## Testing the 11:00 boundaries
 
