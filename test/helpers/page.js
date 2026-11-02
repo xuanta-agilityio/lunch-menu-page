@@ -31,7 +31,7 @@ class FakeElement {
   /** Like a browser, a click on a disabled button does nothing. */
   click() {
     if (this.disabled) return;
-    (this.listeners.click || []).forEach((fn) => fn());
+    (this.listeners.click || []).forEach((fn) => fn({ stopPropagation() {} }));
   }
   hasClass(name) { return this.className.split(/\s+/).includes(name); }
   /** All descendants matching the class name, in document order. */
@@ -106,6 +106,13 @@ function renderPage(week) {
   const page = {
     elements,
     queue,
+    /** The account area: Sign in link, avatar and open menu; each null when not shown. */
+    account: () => {
+      const box = elements.account;
+      const avatar = box.all('avatar')[0] || null;
+      const menu = box.all('account-menu')[0] || null;
+      return { box, signIn: box.all('sign-in')[0] || null, avatar, menu };
+    },
     /** A day's card, found by the date in its label, e.g. 'November 2nd'. */
     card: (label) => cards().find((c) => c.getAttribute('aria-label').includes(label)),
     cards,

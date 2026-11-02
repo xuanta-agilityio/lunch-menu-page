@@ -8,6 +8,7 @@
   var receivedAt = Date.now();
   var refreshTimer = null;
   var pending = {};
+  var menuOpen = false;
 
   var HEART = '<svg viewBox="0 0 24 24" aria-hidden="true"><path class="fill" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" d="M12 20.5s-7.5-4.6-9.3-9.2C1.5 8.2 3.4 4.5 7 4.5c2.1 0 3.6 1.2 5 3 1.4-1.8 2.9-3 5-3 3.6 0 5.5 3.7 4.3 6.8-1.8 4.6-9.3 9.2-9.3 9.2z"/></svg>';
   var DISLIKE = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle class="ring" cx="12" cy="12" r="10.2" fill="none" stroke="currentColor" stroke-width="1.6"/><path class="mark" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" d="M12 17s-4.4-2.7-5.4-5.3C5.9 9.9 7 7.8 9 7.8c1.2 0 2.1.7 3 1.7.9-1 1.8-1.7 3-1.7 2 0 3.1 2.1 2.4 3.9C16.4 14.3 12 17 12 17z"/><path class="mark" stroke="currentColor" stroke-width="1.6" d="M6.5 17.5L17.5 6.5"/></svg>';
@@ -57,6 +58,7 @@
     $('error').hidden = true;
     $('range').textContent = shortDate(data.monday) + ' - ' + shortDate(data.friday);
     renderTestBanner();
+    renderAccount();
 
     var week = $('week');
     week.textContent = '';
@@ -64,6 +66,39 @@
 
     if (data.isAdmin && data.locations) renderCounts();
     else $('counts').hidden = true;
+  }
+
+  // Top right (AC15, AC20): Sign in on the public view; initials avatar with a Sign out menu when signed in.
+  function renderAccount() {
+    var box = $('account');
+    box.textContent = '';
+    if (data.signInUrl) {
+      box.appendChild(link('sign-in', 'Sign in', data.signInUrl));
+    } else if (data.initials) {
+      var avatar = el('button', 'avatar', data.initials);
+      avatar.type = 'button';
+      avatar.setAttribute('aria-label', 'Account menu');
+      avatar.setAttribute('aria-haspopup', 'true');
+      avatar.setAttribute('aria-expanded', menuOpen ? 'true' : 'false');
+      avatar.addEventListener('click', function (e) {
+        e.stopPropagation();
+        menuOpen = !menuOpen;
+        renderAccount();
+      });
+      box.appendChild(avatar);
+      if (menuOpen) {
+        var menu = el('div', 'account-menu');
+        menu.appendChild(link('', 'Sign out', data.signOutUrl));
+        box.appendChild(menu);
+      }
+    }
+  }
+
+  function link(cls, text, href) {
+    var a = el('a', cls, text);
+    a.href = href;
+    a.target = '_top';
+    return a;
   }
 
   function renderTestBanner() {
@@ -92,7 +127,7 @@
     }
     day.appendChild(box);
 
-    var canVote = card.state.vote === 'open' && !card.holiday && !pending[card.date];
+    var canVote = data.canVote && card.state.vote === 'open' && !card.holiday && !pending[card.date];
     var votes = el('div', 'votes');
     votes.appendChild(voteButton(card, 'like', HEART, card.votes.like, canVote));
     votes.appendChild(voteButton(card, 'dislike', DISLIKE, card.votes.dislike, canVote));
@@ -202,6 +237,14 @@
     if (!document.hidden && !data.error && effectiveNow() >= data.nextRefreshMs) refresh();
   });
   setInterval(function () { if (data.testMode) renderTestBanner(); }, 1000);
+
+  function closeMenu() {
+    if (!menuOpen) return;
+    menuOpen = false;
+    renderAccount();
+  }
+  document.addEventListener('click', closeMenu);
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeMenu(); });
 
   render();
   scheduleRefresh();

@@ -15,7 +15,7 @@ const AUTOMATED_IDS = [
   'V01', 'V02', 'V03', 'V04', 'V05', 'V06', 'V07', 'V08', 'V09', 'V10', 'V13',
   'C01', 'C02', 'C05', 'C06', 'C07', 'C10',
   'M03', 'M04', 'M05',
-  'R04', 'R06'
+  'R01', 'R02', 'R03', 'R04', 'R06', 'R07', 'R08', 'R09', 'R10'
 ];
 
 const matrixIds = () => [...fs.readFileSync(path.join(ROOT, 'QA-MATRIX.md'), 'utf8')

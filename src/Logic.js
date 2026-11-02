@@ -372,6 +372,29 @@ function sizedThumbnailUrl(link, px) {
   return /=s\d+$/.test(s) ? s.replace(/=s\d+$/, '=s' + px) : s + '=s' + px;
 }
 
+/**
+ * True only if the web app URL belongs to one of the given deployments. Anything
+ * else, including a missing URL, is false, so the caller falls back to the public view.
+ */
+function isDeploymentUrl(url, deploymentIds) {
+  var m = /^https:\/\/script\.google\.com\/(?:a\/[^\/]+\/)?(?:a\/macros\/[^\/]+\/|macros\/)s\/([^\/?#]+)\/(?:exec|dev)$/.exec(String(url == null ? '' : url));
+  return !!m && deploymentIds.indexOf(m[1]) >= 0;
+}
+
+/** Avatar initials (AC20): first letter of each "."-separated part of the email name. */
+function emailInitials(email) {
+  return String(email == null ? '' : email).split('@')[0].split('.')
+    .filter(function (part) { return part; })
+    .map(function (part) { return part.charAt(0).toUpperCase(); })
+    .join('');
+}
+
+/** Google's sign-out link, returning to the given page when Google allows it (AC20). */
+function signOutUrl(returnUrl) {
+  var logout = 'https://accounts.google.com/Logout';
+  return returnUrl ? logout + '?continue=' + encodeURIComponent(returnUrl) : logout;
+}
+
 if (typeof module !== 'undefined') {
   module.exports = {
     vnParts: vnParts, dateKeyOf: dateKeyOf, vnInstant: vnInstant, addDays: addDays, isDateKey: isDateKey,
@@ -381,6 +404,7 @@ if (typeof module !== 'undefined') {
     parseSheetDate: parseSheetDate, parseMenu: parseMenu, parseSignup: parseSignup, dailyTotal: dailyTotal,
     nextVote: nextVote, voteDateKey: voteDateKey, findVoteRow: findVoteRow, planVote: planVote,
     tallyVotes: tallyVotes, dishImageKey: dishImageKey, imageFileKey: imageFileKey,
-    buildImageIndex: buildImageIndex, sizedThumbnailUrl: sizedThumbnailUrl, LOCATIONS: LOCATIONS
+    buildImageIndex: buildImageIndex, sizedThumbnailUrl: sizedThumbnailUrl, isDeploymentUrl: isDeploymentUrl,
+    emailInitials: emailInitials, signOutUrl: signOutUrl, LOCATIONS: LOCATIONS
   };
 }
