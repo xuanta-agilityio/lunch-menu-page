@@ -41,10 +41,34 @@ test('R01 (page): vote icons disabled during the open window, no counts table, S
   assert.equal(page.account().avatar, null);
 });
 
-test('R01 (page): the Sign in button comes first in the page header (top left)', () => {
-  const html = fs.readFileSync(path.join(__dirname, '..', 'src', 'Index.html'), 'utf8');
-  assert.ok(html.indexOf('id="account"') > html.indexOf('class="banner"'), 'the account area is in the header');
-  assert.ok(html.indexOf('id="account"') < html.indexOf('<h1>'), 'and before the MENU heading');
+/** The declarations of one CSS rule in src/Styles.html, as { property: value }. */
+function cssRule(selector) {
+  const css = fs.readFileSync(path.join(__dirname, '..', 'src', 'Styles.html'), 'utf8');
+  const start = css.search(new RegExp('^\\s*' + selector.replace('.', '\\.') + ' \\{', 'm'));
+  assert.ok(start >= 0, 'no CSS rule for ' + selector);
+  const body = css.slice(css.indexOf('{', start) + 1, css.indexOf('}', start));
+  return Object.fromEntries(body.split(';').map((d) => d.split(':').map((s) => s.trim())).filter((d) => d[0]));
+}
+
+// The fake DOM has no layout, so these check the rules that place the account area.
+// The real position was checked in a browser and QA checks it by hand (R01, R09).
+for (const id of ['R01', 'R09']) {
+  test(`${id} (page): the Sign in button and avatar are placed at the top right of the header`, () => {
+    const html = fs.readFileSync(path.join(__dirname, '..', 'src', 'Index.html'), 'utf8');
+    const header = html.slice(html.indexOf('class="banner"'), html.indexOf('</header>'));
+    assert.ok(header.includes('id="account"'), 'the account area is in the header');
+    const account = cssRule('.account');
+    assert.equal(account.position, 'absolute');
+    assert.ok('top' in account && 'right' in account, 'anchored to the top right');
+    assert.equal('left' in account, false);
+    assert.equal(cssRule('.banner').position, 'relative', 'anchored to the header, not the window');
+  });
+}
+
+test('R10 (page): the avatar menu opens under the avatar, inside the right edge', () => {
+  const menu = cssRule('.account-menu');
+  assert.equal(menu.right, '0');
+  assert.equal('left' in menu, false);
 });
 
 test('R02 (page): Sign in opens the company view at the top of the window', () => {

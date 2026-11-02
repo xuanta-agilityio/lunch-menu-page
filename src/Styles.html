@@ -34,12 +34,13 @@
     text-align: center;
   }
   .banner {
+    position: relative;
     padding: 28px 16px 8px;
     max-width: 1240px;
     width: 100%;
     margin: 0 auto;
   }
-  .account { position: relative; display: inline-block; margin-bottom: 14px; min-height: 40px; }
+  .account { position: absolute; top: 28px; right: 16px; }
   .sign-in {
     display: inline-block; padding: 9px 18px; border-radius: 20px;
     background: var(--navy); color: #fff; font-size: 14px; font-weight: 600; text-decoration: none;
@@ -52,7 +53,7 @@
   .avatar:hover { background: var(--navy-dark); }
   .sign-in:focus-visible, .avatar:focus-visible, .account-menu a:focus-visible { outline: 2px solid var(--pink); outline-offset: 2px; }
   .account-menu {
-    position: absolute; top: 46px; left: 0; z-index: 10; min-width: 130px;
+    position: absolute; top: 46px; right: 0; z-index: 10; min-width: 130px;
     background: var(--bg); border: 1px solid var(--line); border-radius: 8px;
     box-shadow: 0 6px 20px rgba(30, 77, 159, .18); overflow: hidden;
   }
