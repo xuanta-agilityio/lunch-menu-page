@@ -111,8 +111,8 @@ Locations shown on the page: **604 Núi Thành** (VP 604 NT), **Trung Lương 18
 - **And** a **Sign in** button is shown at the top right
 - **When** they click Sign in and sign in with a company Google account (@asnet.com.vn)
 - **Then** they see the page for their role (AC18) and can vote
-- **When** they try to sign in with an account outside the company domain
-- **Then** Google shows that they have no access; they can still use the public page without voting
+- **When** a visitor without a company account clicks Sign in
+- **Then** Google's sign-in page only accepts @asnet.com.vn accounts (the domain is pre-filled), so an outside account cannot sign in; they can still use the public page without voting (decided 2 Nov)
 
 ### AC16 – Like / dislike vote per day
 - **Given** a signed-in user (normal or admin) views Monday 2 Nov

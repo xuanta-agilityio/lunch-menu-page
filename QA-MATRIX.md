@@ -64,9 +64,9 @@ Test cases for the ticket Doc, grouped by area and traced to AC1–AC20. Result 
 
 | TC | Role | Action | Expected | AC | Result |
 | --- | --- | --- | --- | --- | --- |
-| R01 | Signed out | Open the public page | Menu and like/dislike counts shown, vote icons disabled, no meal counts, Sign in button at top right | AC15 | Not run |
+| R01 | Signed out | Open the public page | Menu and like/dislike counts shown, vote icons disabled, no meal counts, Sign in button at top right | AC15 | Pass |
 | R02 | Signed out | Click Sign in, sign in with a company account | Page opens with the view for the user's role and voting works | AC15 | Not run |
-| R03 | Outside account | Try to sign in | Google shows no access for the company view; the public view still works without voting | AC15 | Not run |
+| R03 | Outside account | Click Sign in, try a personal Gmail | Sign-in page only accepts @asnet.com.vn (domain pre-filled), so a personal Gmail cannot be entered; the public view still works without voting | AC15 | Pass |
 | R04 | Normal user | Sign in, open page | Menu, votes and like/dislike counts; no meal counts, no total | AC18 | Not run |
 | R05 | Admin | Sign in, open page | Menu, votes, lunch counts and total | AC18 | Pass |
 | R06 | Normal user | Look for counts in the page source or network data | Counts are not sent to the browser | AC18 | Not run |
