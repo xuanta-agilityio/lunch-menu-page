@@ -2,7 +2,10 @@
 
 A Google Apps Script web app that shows one working week (Mon–Fri) of the lunch menu, with like/dislike votes, and per-location meal counts for the admin. The requirements are in [TICKET.md](TICKET.md).
 
-- **Standalone Apps Script project.** It isn't bound to any sheet. It runs as the owner and only @asnet.com.vn accounts can open it.
+- **Standalone Apps Script project.** It isn't bound to any sheet and runs as the owner. Two deployments run the same code:
+  - **Company view:** only @asnet.com.vn accounts can open it. Users vote, and the admin sees meal counts.
+  - **Public view:** anyone can open it without signing in. It shows the menu, dish photos and like/dislike counts, with voting disabled and a Sign in button.
+- **The view depends on the deployment, not the visitor.** `isCompanyView_` in [src/Api.js](src/Api.js) gives the company view only to the deployment IDs in [src/Config.js](src/Config.js). Anything else is public, the email is ignored, the sign-up sheet isn't read, and `vote` refuses. Every top-level function can be called from the public page, so keep this check in any new function that returns private data.
 - **Source sheets are read-only.** The menu (`MM/YYYY` tabs) and sign-up (`YYYY-MM` tabs) sheets are only read, in [src/SourceSheets.js](src/SourceSheets.js). `npm test` fails if that file contains a write call or if another file refers to a source sheet.
 - **Votes** are stored in a separate sheet, "Lunch Menu Votes", which is created in the owner's My Drive on first use. Its ID is kept in the Script Property `VOTES_SHEET_ID`.
 - **Admin:** `xuan.tathanh@asnet.com.vn`. Meal counts and totals are only added to the server response for the admin, so other users' browsers never receive them.
@@ -31,14 +34,17 @@ npm test
 clasp push
 ```
 
-On Windows PowerShell, call clasp as `clasp.cmd`: the script policy blocks the `clasp.ps1` wrapper. `npm run push` runs the tests first and pushes only if they pass. Pushing updates the editor copy only. Users see the change after you update the existing deployment, which keeps the URL the same:
+On Windows PowerShell, call clasp as `clasp.cmd`: the script policy blocks the `clasp.ps1` wrapper. `npm run push` runs the tests first and pushes only if they pass. Pushing updates the editor copy only. Users see the change after a release, which keeps both URLs the same. The access level is stored in each Apps Script version, so each deployment needs its own version. The script handles that, runs the tests first, and leaves the editor on the committed `DOMAIN` manifest:
 
 ```bash
-clasp update-deployment AKfycbyZF5Mp6olm3c0PCO553KsXiSxxJ4bXAz4kmLdGdv1L0ExIIZsc49x3cUNl-2NakmFX -d "describe the change"
+node scripts/release.js "describe the change"
 ```
 
+To release only one view, add `company` or `public` after the description.
+
 - Script project: https://script.google.com/d/1Srn5pfcQcqbUBJD2wT7983YSJlNWPWUZ4gSVM2cyfH_z6N1Xialu9bRM/edit
-- Web app: https://script.google.com/a/macros/asnet.com.vn/s/AKfycbyZF5Mp6olm3c0PCO553KsXiSxxJ4bXAz4kmLdGdv1L0ExIIZsc49x3cUNl-2NakmFX/exec
+- Company view: https://script.google.com/a/macros/asnet.com.vn/s/AKfycbyZF5Mp6olm3c0PCO553KsXiSxxJ4bXAz4kmLdGdv1L0ExIIZsc49x3cUNl-2NakmFX/exec
+- Public view: https://script.google.com/macros/s/AKfycbwPPbsGrmrM8IiNSHOMxcEx9ki7bPbY0WtTfV8Vu94sortVl6Xo7Q84Ht1PUD-3sgbh/exec
 
 ## Images
 
@@ -57,5 +63,8 @@ The admin can add `?now=YYYY-MM-DDTHH:mm[:ss]` (Vietnam time) to the web app URL
 
 ## Known limits
 
+- **Sign out:** Apps Script has no session of its own, so Sign out signs the person out of every Google account in that browser (AC20).
+- **Quota:** public visits run under the owner's Apps Script quota, and each load reads the sheets with no cache. Add a short cache on the public view if limits are hit.
+- **Google's banner:** Google shows "This application was created by a Google Apps Script user" on the public view. It can't be removed, and the client accepted it.
 - **Several Google accounts in one browser:** Apps Script web apps can fail when someone is signed in to several Google accounts and the default one isn't their @asnet.com.vn account. Use a separate browser profile, or sign out of the other accounts.
 - **Reading the votes sheet:** each page load reads the whole votes sheet. That's fine for a few years of data (about 60k rows a year); archive old rows if it gets slow.

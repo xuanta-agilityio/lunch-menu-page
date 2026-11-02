@@ -1,6 +1,10 @@
 /**
  * Web app entry point and the two calls the page makes (getWeek, vote).
  * Meal counts are only added to the response for the admin (AC5, AC18).
+ *
+ * Two deployments run this code (AC15, AC17). Which view a request gets depends on
+ * the deployment, never on the visitor's email: anyone can call these functions on
+ * the public deployment, and a signed-in admin may open it too.
  */
 
 var WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
@@ -8,9 +12,7 @@ var WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'
 function doGet(e) {
   var template = HtmlService.createTemplateFromFile('Index');
   try {
-    var email = currentEmail_();
-    var clock = resolveNow_(email, e && e.parameter && e.parameter.now);
-    template.initialJson = safeJson_(buildWeek_(email, clock));
+    template.initialJson = safeJson_(weekForRequest_(e && e.parameter && e.parameter.now));
   } catch (err) {
     template.initialJson = safeJson_({ error: String(err && err.message || err) });
   }
@@ -25,12 +27,32 @@ function include(name) {
 
 /** Called by the page on refresh. nowParam is only honoured for the admin. */
 function getWeek(nowParam) {
+  return weekForRequest_(nowParam);
+}
+
+function weekForRequest_(nowParam) {
+  if (!isCompanyView_()) return buildWeek_('', { ms: Date.now(), test: false });
   var email = currentEmail_();
   return buildWeek_(email, resolveNow_(email, nowParam));
 }
 
+/** Only the company deployments give the company view; anything else is public. */
+function isCompanyView_() {
+  try {
+    return isDeploymentUrl(ScriptApp.getService().getUrl(), [CONFIG.COMPANY_DEPLOYMENT_ID, CONFIG.DEV_DEPLOYMENT_ID]);
+  } catch (err) {
+    console.error('Deployment unknown, using the public view: ' + err);
+    return false;
+  }
+}
+
+function webAppUrl_(deploymentId, domain) {
+  return 'https://script.google.com/' + (domain ? 'a/macros/' + domain + '/' : 'macros/') + 's/' + deploymentId + '/exec';
+}
+
 /** Called by the page when a heart or dislike icon is clicked. */
 function vote(dateKey, clicked, nowParam) {
+  if (!isCompanyView_()) throw new Error('Please sign in with your @' + CONFIG.DOMAIN + ' account to vote.');
   var email = currentEmail_();
   var clock = resolveNow_(email, nowParam);
   if (clicked !== 'like' && clicked !== 'dislike') throw new Error('Unknown vote.');
@@ -109,8 +131,16 @@ function buildWeek_(email, clock) {
     isAdmin: admin,
     testMode: clock.test,
     nowMs: clock.ms,
-    nextRefreshMs: nextBoundary(clock.ms)
+    nextRefreshMs: nextBoundary(clock.ms),
+    canVote: !!email
   };
+  // Account area (AC15, AC20): initials only, never the email or a name.
+  if (email) {
+    week.initials = emailInitials(email);
+    week.signOutUrl = signOutUrl(CONFIG.PUBLIC_DEPLOYMENT_ID ? webAppUrl_(CONFIG.PUBLIC_DEPLOYMENT_ID) : '');
+  } else {
+    week.signInUrl = webAppUrl_(CONFIG.COMPANY_DEPLOYMENT_ID, CONFIG.DOMAIN);
+  }
   if (admin) week.locations = LOCATIONS.map(function (l) { return { id: l.id, name: l.name }; });
   return week;
 }

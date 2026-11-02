@@ -91,7 +91,7 @@ function createApp({ menu = { '11/2026': menuNovember() }, signup = { '2026-11':
         put: (k, v) => { cacheStore[k] = v; }
       })
     },
-    ScriptApp: { getOAuthToken: () => 'owner-token' },
+    ScriptApp: { getOAuthToken: () => 'owner-token', getService: () => ({ getUrl: () => state.serviceUrl() }) },
     Utilities: {
       base64Encode: (bytes) => Buffer.from(bytes).toString('base64'),
       formatDate: (d) => L.dateKeyOf(d.getTime())
@@ -135,7 +135,20 @@ function createApp({ menu = { '11/2026': menuNovember() }, signup = { '2026-11':
     vm.runInContext(fs.readFileSync(path.join(SRC_DIR, file), 'utf8'), ctx, { filename: file });
   }
 
+  // URLs as getService().getUrl() returned them in the deployment trial.
+  const deploymentUrl = (id) => `https://script.google.com/a/asnet.com.vn/macros/s/${id}/exec`;
+  const onCompany = () => deploymentUrl(ctx.CONFIG.COMPANY_DEPLOYMENT_ID);
+  const onPublic = () => deploymentUrl(ctx.CONFIG.PUBLIC_DEPLOYMENT_ID || 'PUBLIC_DEPLOYMENT');
+  state.serviceUrl = onCompany;
+
   const app = {
+    /** Runs on the public deployment, or the company one (the default). */
+    onPublicDeployment() { state.serviceUrl = onPublic; return app; },
+    onCompanyDeployment() { state.serviceUrl = onCompany; return app; },
+    /** Makes getService().getUrl() return, or throw, what the given function does. */
+    withServiceUrl(fn) { state.serviceUrl = fn; return app; },
+    companyDeploymentId: () => ctx.CONFIG.COMPANY_DEPLOYMENT_ID,
+    publicDeploymentId: () => ctx.CONFIG.PUBLIC_DEPLOYMENT_ID,
     /** Signs in as this email at this Vietnam time, e.g. '2026-11-02T09:00'. */
     as(email, time) {
       state.email = email;

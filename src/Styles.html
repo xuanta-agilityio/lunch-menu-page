@@ -39,6 +39,25 @@
     width: 100%;
     margin: 0 auto;
   }
+  .account { position: relative; display: inline-block; margin-bottom: 14px; min-height: 40px; }
+  .sign-in {
+    display: inline-block; padding: 9px 18px; border-radius: 20px;
+    background: var(--navy); color: #fff; font-size: 14px; font-weight: 600; text-decoration: none;
+  }
+  .sign-in:hover { background: var(--navy-dark); }
+  .avatar {
+    width: 40px; height: 40px; border-radius: 50%; border: none; cursor: pointer;
+    background: var(--navy); color: #fff; font: inherit; font-size: 14px; font-weight: 600;
+  }
+  .avatar:hover { background: var(--navy-dark); }
+  .sign-in:focus-visible, .avatar:focus-visible, .account-menu a:focus-visible { outline: 2px solid var(--pink); outline-offset: 2px; }
+  .account-menu {
+    position: absolute; top: 46px; left: 0; z-index: 10; min-width: 130px;
+    background: var(--bg); border: 1px solid var(--line); border-radius: 8px;
+    box-shadow: 0 6px 20px rgba(30, 77, 159, .18); overflow: hidden;
+  }
+  .account-menu a { display: block; padding: 10px 14px; color: var(--ink); font-size: 14px; text-decoration: none; }
+  .account-menu a:hover { background: var(--surface); }
   .banner h1 { margin: 0; font-size: 28px; letter-spacing: 1px; color: var(--navy); }
   .banner h1::after {
     content: ''; display: block; width: 44px; height: 4px; border-radius: 2px;
