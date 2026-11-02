@@ -3,15 +3,17 @@
  * page as data URIs. Nothing is shared or made public. This file must only
  * read Drive: `npm test` fails if a write method appears here.
  *
- * Drive's thumbnail is enough for the 128 px image slot and much smaller than
- * the original. Results are cached, so most page loads don't touch Drive.
+ * A 256 px Drive thumbnail is enough for the 128 px image slot and much smaller
+ * than the original. Results are cached, so most page loads don't touch Drive.
  */
 
 // Bump the version to discard everything already cached.
-var IMAGE_CACHE_VERSION = 'v2';
+var IMAGE_CACHE_VERSION = 'v4';
 var IMAGE_INDEX_CACHE_KEY = 'dishImageIndex:' + IMAGE_CACHE_VERSION;
 var IMAGE_INDEX_TTL_SECONDS = 10 * 60;
 var IMAGE_TTL_SECONDS = 6 * 60 * 60; // CacheService maximum
+var IMAGE_FALLBACK_TTL_SECONDS = 10 * 60; // An original is only a stopgap: retry the thumbnail soon
+var IMAGE_THUMBNAIL_PX = 256;        // Twice the slot size, for sharp high-DPI screens
 var MAX_IMAGE_BYTES = 120 * 1024;    // Larger originals keep the placeholder
 
 function dishImageIndex_(cache) {
@@ -32,19 +34,47 @@ function dishImageIndex_(cache) {
   return index;
 }
 
-/** Data URI of a file's thumbnail, or of the original if it is small enough; else null. */
-function imageDataUri_(fileId) {
-  var file = DriveApp.getFileById(fileId);
-  var blob = null;
+/** A file's 256 px thumbnail from Drive as a blob, or null (the reason is logged). */
+function thumbnailBlob_(fileId) {
   try {
-    blob = file.getThumbnail();
+    var url = sizedThumbnailUrl(Drive.Files.get(fileId, { fields: 'thumbnailLink' }).thumbnailLink, IMAGE_THUMBNAIL_PX);
+    if (!url) {
+      console.warn('No usable thumbnail link for ' + fileId);
+      return null;
+    }
+    var response = UrlFetchApp.fetch(url, {
+      headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() },
+      muteHttpExceptions: true
+    });
+    var blob = response.getBlob();
+    if (response.getResponseCode() !== 200 || String(blob.getContentType()).indexOf('image/') !== 0 || !blob.getBytes().length) {
+      console.warn('Thumbnail unavailable for ' + fileId + ': HTTP ' + response.getResponseCode() + ', ' + blob.getContentType());
+      return null;
+    }
+    return blob;
   } catch (err) {
-    console.warn('No thumbnail for ' + fileId + ': ' + err);
+    console.warn('Thumbnail failed for ' + fileId + ': ' + err);
+    return null;
   }
-  if (!blob || !blob.getBytes().length) blob = file.getBlob();
+}
+
+/** { uri, isThumbnail } from a file's thumbnail, or its original if small enough; else null. */
+function loadDishImage_(fileId) {
+  var blob = thumbnailBlob_(fileId);
+  var isThumbnail = !!blob;
+  if (!blob) {
+    console.warn('Using the original file for ' + fileId);
+    blob = DriveApp.getFileById(fileId).getBlob();
+  }
   var bytes = blob.getBytes();
-  if (!bytes.length || bytes.length > MAX_IMAGE_BYTES) return null;
-  return 'data:' + (blob.getContentType() || 'image/jpeg') + ';base64,' + Utilities.base64Encode(bytes);
+  if (!bytes.length || bytes.length > MAX_IMAGE_BYTES) {
+    console.warn('Placeholder kept for ' + fileId + ': ' + bytes.length + ' bytes');
+    return null;
+  }
+  return {
+    uri: 'data:' + (blob.getContentType() || 'image/jpeg') + ';base64,' + Utilities.base64Encode(bytes),
+    isThumbnail: isThumbnail
+  };
 }
 
 function cachePut_(cache, key, value, ttl) {
@@ -56,14 +86,26 @@ function cachePut_(cache, key, value, ttl) {
 }
 
 /**
- * Admin only: run this from the Apps Script editor to grant the Drive permission
- * (a page load doesn't prompt for it) and to see the result in the log.
+ * Admin only: run this from the Apps Script editor to grant new permissions.
+ * A page load or a normal Run doesn't prompt once some permissions are granted,
+ * so this asks Google to prompt for any that are missing. It then reads every
+ * thumbnail, skipping the image cache, and logs the sizes.
  */
 function checkDishImages() {
   if (!isAdmin_(currentEmail_())) throw new Error('Admin only.');
+  console.log('Granted permissions: ' + ScriptApp.getAuthorizationInfo(ScriptApp.AuthMode.FULL).getAuthorizedScopes());
+  ScriptApp.requireAllScopes(ScriptApp.AuthMode.FULL);
   var folder = DriveApp.getFolderById(CONFIG.DISH_IMAGES_FOLDER_ID);
-  var dishes = Object.keys(dishImageIndex_(CacheService.getScriptCache())).length;
-  console.log('Drive access OK. Folder "' + folder.getName() + '" has images for ' + dishes + ' dishes.');
+  var index = dishImageIndex_(CacheService.getScriptCache());
+  var dishes = Object.keys(index);
+  var sizes = [];
+  dishes.forEach(function (key) {
+    var blob = thumbnailBlob_(index[key].id);
+    if (blob) sizes.push(blob.getBytes().length);
+  });
+  var total = sizes.reduce(function (sum, n) { return sum + n; }, 0);
+  console.log('Drive access OK. Folder "' + folder.getName() + '": ' + dishes.length + ' dishes, ' + sizes.length +
+    ' thumbnails, ' + Math.round(total / 1024) + ' KB in total, largest ' + Math.round(Math.max.apply(null, sizes.concat(0)) / 1024) + ' KB.');
 }
 
 /**
@@ -85,8 +127,11 @@ function dishImageUrls_(names) {
       var key = cacheKeyOf(n);
       try {
         if (!cached[key]) {
-          cached[key] = imageDataUri_(index[dishImageKey(n)].id);
-          if (cached[key]) cachePut_(cache, key, cached[key], IMAGE_TTL_SECONDS);
+          var image = loadDishImage_(index[dishImageKey(n)].id);
+          if (image) {
+            cached[key] = image.uri;
+            cachePut_(cache, key, image.uri, image.isThumbnail ? IMAGE_TTL_SECONDS : IMAGE_FALLBACK_TTL_SECONDS);
+          }
         }
         if (cached[key]) urls[n] = cached[key];
       } catch (err) {

@@ -8,7 +8,7 @@ const src = path.join(__dirname, '..', 'src');
 const files = fs.readdirSync(src).filter((f) => f.endsWith('.js'));
 const errors = [];
 
-const WRITE_CALL = /\.(set\w*|append\w*|insert\w*|delete\w*|clear\w*|copyTo|moveTo|sort|merge\w*|protect|hide\w*|show\w*|add\w*|remove\w*|create\w*|flush)\s*\(/;
+const WRITE_CALL = /\.(set\w*|append\w*|insert\w*|delete\w*|clear\w*|copyTo|moveTo|sort|merge\w*|protect|hide\w*|show\w*|add\w*|remove\w*|create\w*|flush|update\w*|patch|trash|emptyTrash|copy)\s*\(/;
 for (const readOnlyFile of ['SourceSheets.js', 'Images.js']) {
   fs.readFileSync(path.join(src, readOnlyFile), 'utf8').split('\n').forEach((line, i) => {
     const code = line.replace(/\/\/.*$/, '');

@@ -46,23 +46,60 @@ test('files that are not supported images are skipped', () => {
   assert.deepEqual(index, {});
 });
 
-function load({ thumbnail = (f) => blob('image/png', 2000), original = () => blob('image/jpeg', 70000), driveError } = {}) {
-  const calls = { list: 0, file: 0 };
+test('thumbnail links are resized, and only Google https hosts qualify', () => {
+  assert.equal(L.sizedThumbnailUrl('https://lh3.googleusercontent.com/drive-storage/abc=s220', 256),
+    'https://lh3.googleusercontent.com/drive-storage/abc=s256');
+  assert.equal(L.sizedThumbnailUrl('https://lh3.googleusercontent.com/drive-storage/abc', 256),
+    'https://lh3.googleusercontent.com/drive-storage/abc=s256');
+  assert.equal(L.sizedThumbnailUrl('https://drive.google.com/thumbnail?id=1=s220', 256), 'https://drive.google.com/thumbnail?id=1=s256');
+  assert.equal(L.sizedThumbnailUrl('http://lh3.googleusercontent.com/a=s220', 256), null);
+  assert.equal(L.sizedThumbnailUrl('https://googleusercontent.com.evil.example/a=s220', 256), null);
+  assert.equal(L.sizedThumbnailUrl('https://evil.example/googleusercontent.com/a', 256), null);
+  assert.equal(L.sizedThumbnailUrl(undefined, 256), null);
+});
+
+function load({ thumbnail = (f) => blob('image/png', 2000), original = () => blob('image/jpeg', 70000), driveError, link } = {}) {
+  const calls = { list: 0, file: 0, meta: 0, fetches: [], requireAllScopes: [] };
+  const ttls = {};
   const store = {};
   const fileFake = (f) => ({
     getId: () => f.id, getName: () => f.name, getMimeType: () => f.mimeType, getLastUpdated: () => new Date(f.updated),
-    getThumbnail: () => thumbnail(f), getBlob: () => original(f)
+    getBlob: () => original(f)
   });
   const state = { driveError, files: FILE_NAMES.map(jpeg) };
   const ctx = {
-    console: { warn() {}, error() {} },
+    console: { warn() {}, error() {}, log() {} },
     CONFIG: { DISH_IMAGES_FOLDER_ID: 'folder' },
+    ScriptApp: {
+      AuthMode: { FULL: 'FULL' },
+      getOAuthToken: () => 'owner-token',
+      getAuthorizationInfo: () => ({ getAuthorizedScopes: () => ['scope-a'] }),
+      requireAllScopes: (mode) => { calls.requireAllScopes.push(mode); }
+    },
+    Drive: {
+      Files: {
+        get: (id) => {
+          calls.meta++;
+          return { thumbnailLink: link === undefined ? 'https://lh3.googleusercontent.com/drive-storage/' + id + '=s220' : link };
+        }
+      }
+    },
+    UrlFetchApp: {
+      fetch: (url, opts) => {
+        calls.fetches.push({ url, opts });
+        const id = /drive-storage\/(.+)=s\d+$/.exec(url)[1];
+        const b = thumbnail(state.files.find((f) => f.id === id));
+        return b
+          ? { getResponseCode: () => 200, getBlob: () => b }
+          : { getResponseCode: () => 403, getBlob: () => blob('text/html', 500) };
+      }
+    },
     Utilities: { base64Encode: (bytes) => Buffer.from(bytes).toString('base64') },
     CacheService: {
       getScriptCache: () => ({
         get: (k) => store[k] ?? null,
         getAll: (keys) => Object.fromEntries(keys.filter((k) => k in store).map((k) => [k, store[k]])),
-        put: (k, v) => { if (v.length > 100 * 1024) throw new Error('too large'); store[k] = v; }
+        put: (k, v, ttl) => { if (v.length > 100 * 1024) throw new Error('too large'); store[k] = v; ttls[k] = ttl; }
       })
     },
     DriveApp: {
@@ -79,7 +116,7 @@ function load({ thumbnail = (f) => blob('image/png', 2000), original = () => blo
   for (const f of ['Logic.js', 'Images.js']) {
     vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'src', f), 'utf8'), ctx, { filename: f });
   }
-  return { ctx, calls, state, store };
+  return { ctx, calls, state, store, ttls };
 }
 const blob = (type, size) => ({ getContentType: () => type, getBytes: () => new Array(size).fill(65) });
 
@@ -94,10 +131,74 @@ test('the page gets small thumbnails as data URIs; placeholders stay for dishes 
 test('a repeated dish uses the same image; later loads come from the cache', () => {
   const { ctx, calls } = load();
   const urls = ctx.dishImageUrls_(['Cá kho tộ']);
-  assert.equal(calls.file, 1);
+  assert.equal(calls.fetches.length, 1);
   assert.deepEqual(JSON.parse(JSON.stringify(ctx.dishImageUrls_(['Cá kho tộ']))), JSON.parse(JSON.stringify(urls)));
   assert.equal(calls.list, 1);
+  assert.equal(calls.fetches.length, 1);
+});
+
+test('the 256 px thumbnail is requested with the owner token; the original is not read', () => {
+  const { ctx, calls } = load();
+  ctx.dishImageUrls_(['Phở bò']);
+  assert.match(calls.fetches[0].url, /=s256$/);
+  assert.equal(calls.fetches[0].opts.headers.Authorization, 'Bearer owner-token');
+  assert.equal(calls.file, 0);
+});
+
+test('a thumbnail link on another host is never fetched, so the token is not sent there', () => {
+  const { ctx, calls } = load({ link: 'https://evil.example/thumb=s220' });
+  assert.match(ctx.dishImageUrls_(['Phở bò'])['Phở bò'], /^data:image\/jpeg;base64,/);
+  assert.equal(calls.fetches.length, 0);
+});
+
+test('without a thumbnail link the small original is used', () => {
+  const { ctx, calls } = load({ link: null });
+  assert.match(ctx.dishImageUrls_(['Phở bò'])['Phở bò'], /^data:image\/jpeg;base64,/);
   assert.equal(calls.file, 1);
+});
+
+test('a non-image thumbnail response is not sent to the page', () => {
+  const { ctx } = load({ thumbnail: () => blob('text/html', 500) });
+  assert.match(ctx.dishImageUrls_(['Phở bò'])['Phở bò'], /^data:image\/jpeg;base64,/);
+});
+
+test('a missing UrlFetch permission: the original is cached briefly, so the thumbnail is retried soon', () => {
+  const noPermission = () => { throw new Error('You do not have permission to call UrlFetchApp.fetch'); };
+  const failing = load({ thumbnail: noPermission });
+  assert.match(failing.ctx.dishImageUrls_(['Phở bò'])['Phở bò'], /^data:image\/jpeg;base64,/);
+  const key = Object.keys(failing.ttls).find((k) => k.startsWith('dishImage:'));
+  assert.equal(failing.ttls[key], 10 * 60, 'original kept for 10 minutes');
+
+  const working = load();
+  working.ctx.dishImageUrls_(['Phở bò']);
+  const thumbKey = Object.keys(working.ttls).find((k) => k.startsWith('dishImage:'));
+  assert.equal(working.ttls[thumbKey], 6 * 60 * 60, 'thumbnail kept for 6 hours');
+});
+
+test('checkDishImages asks for missing permissions before reading Drive', () => {
+  const { ctx, calls } = load();
+  ctx.currentEmail_ = () => 'admin@x';
+  ctx.isAdmin_ = () => true;
+  ctx.ScriptApp.requireAllScopes = () => { throw new Error('Authorization required'); };
+  assert.throws(() => ctx.checkDishImages(), /Authorization required/);
+  assert.equal(calls.list, 0);
+});
+
+test('the page itself never prompts for permissions', () => {
+  const { ctx, calls } = load();
+  ctx.dishImageUrls_(['Phở bò']);
+  assert.deepEqual(calls.requireAllScopes, []);
+});
+
+test('checkDishImages reads every thumbnail and refuses non-admins', () => {
+  const { ctx, calls } = load();
+  ctx.currentEmail_ = () => 'admin@x';
+  ctx.isAdmin_ = () => true;
+  ctx.DriveApp.getFolderById = ((orig) => () => Object.assign(orig(), { getName: () => 'Menu - images' }))(ctx.DriveApp.getFolderById);
+  ctx.checkDishImages();
+  assert.equal(calls.fetches.length, 19);
+  ctx.isAdmin_ = () => false;
+  assert.throws(() => ctx.checkDishImages(), /Admin only/);
 });
 
 test('without a thumbnail a small original is used; an oversized one keeps the placeholder', () => {

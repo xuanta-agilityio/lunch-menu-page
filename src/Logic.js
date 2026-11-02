@@ -362,6 +362,16 @@ function buildImageIndex(files) {
   return index;
 }
 
+/**
+ * Drive's thumbnailLink at the given size, or null if it isn't an https link on
+ * a Google host. The link is fetched with the owner's token, so nothing else qualifies.
+ */
+function sizedThumbnailUrl(link, px) {
+  var s = String(link == null ? '' : link);
+  if (!/^https:\/\/([a-z0-9-]+\.)*(googleusercontent|google)\.com\//i.test(s)) return null;
+  return /=s\d+$/.test(s) ? s.replace(/=s\d+$/, '=s' + px) : s + '=s' + px;
+}
+
 if (typeof module !== 'undefined') {
   module.exports = {
     vnParts: vnParts, dateKeyOf: dateKeyOf, vnInstant: vnInstant, addDays: addDays, isDateKey: isDateKey,
@@ -371,6 +381,6 @@ if (typeof module !== 'undefined') {
     parseSheetDate: parseSheetDate, parseMenu: parseMenu, parseSignup: parseSignup, dailyTotal: dailyTotal,
     nextVote: nextVote, voteDateKey: voteDateKey, findVoteRow: findVoteRow, planVote: planVote,
     tallyVotes: tallyVotes, dishImageKey: dishImageKey, imageFileKey: imageFileKey,
-    buildImageIndex: buildImageIndex, LOCATIONS: LOCATIONS
+    buildImageIndex: buildImageIndex, sizedThumbnailUrl: sizedThumbnailUrl, LOCATIONS: LOCATIONS
   };
 }
