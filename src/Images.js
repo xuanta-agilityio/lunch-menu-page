@@ -7,7 +7,9 @@
  * the original. Results are cached, so most page loads don't touch Drive.
  */
 
-var IMAGE_INDEX_CACHE_KEY = 'dishImageIndex';
+// Bump the version to discard everything already cached.
+var IMAGE_CACHE_VERSION = 'v2';
+var IMAGE_INDEX_CACHE_KEY = 'dishImageIndex:' + IMAGE_CACHE_VERSION;
 var IMAGE_INDEX_TTL_SECONDS = 10 * 60;
 var IMAGE_TTL_SECONDS = 6 * 60 * 60; // CacheService maximum
 var MAX_IMAGE_BYTES = 120 * 1024;    // Larger originals keep the placeholder
@@ -23,7 +25,10 @@ function dishImageIndex_(cache) {
     files.push({ id: f.getId(), name: f.getName(), mimeType: f.getMimeType(), updated: f.getLastUpdated().getTime() });
   }
   var index = buildImageIndex(files);
-  cachePut_(cache, IMAGE_INDEX_CACHE_KEY, JSON.stringify(index), IMAGE_INDEX_TTL_SECONDS);
+  // Only a successful, non-empty read is cached; anything else is retried on the next load.
+  if (Object.keys(index).length) {
+    cachePut_(cache, IMAGE_INDEX_CACHE_KEY, JSON.stringify(index), IMAGE_INDEX_TTL_SECONDS);
+  }
   return index;
 }
 
@@ -38,7 +43,7 @@ function imageDataUri_(fileId) {
   }
   if (!blob || !blob.getBytes().length) blob = file.getBlob();
   var bytes = blob.getBytes();
-  if (bytes.length > MAX_IMAGE_BYTES) return null;
+  if (!bytes.length || bytes.length > MAX_IMAGE_BYTES) return null;
   return 'data:' + (blob.getContentType() || 'image/jpeg') + ';base64,' + Utilities.base64Encode(bytes);
 }
 
@@ -48,6 +53,17 @@ function cachePut_(cache, key, value, ttl) {
   } catch (err) {
     console.warn('Not cached: ' + key + ': ' + err); // e.g. over the 100 KB value limit
   }
+}
+
+/**
+ * Admin only: run this from the Apps Script editor to grant the Drive permission
+ * (a page load doesn't prompt for it) and to see the result in the log.
+ */
+function checkDishImages() {
+  if (!isAdmin_(currentEmail_())) throw new Error('Admin only.');
+  var folder = DriveApp.getFolderById(CONFIG.DISH_IMAGES_FOLDER_ID);
+  var dishes = Object.keys(dishImageIndex_(CacheService.getScriptCache())).length;
+  console.log('Drive access OK. Folder "' + folder.getName() + '" has images for ' + dishes + ' dishes.');
 }
 
 /**
@@ -62,7 +78,7 @@ function dishImageUrls_(names) {
     var wanted = names.filter(function (n) { return index[dishImageKey(n)]; });
     var cacheKeyOf = function (n) {
       var entry = index[dishImageKey(n)];
-      return 'dishImage:' + entry.id + ':' + entry.updated;
+      return 'dishImage:' + IMAGE_CACHE_VERSION + ':' + entry.id + ':' + entry.updated;
     };
     var cached = cache.getAll(wanted.map(cacheKeyOf));
     wanted.forEach(function (n) {

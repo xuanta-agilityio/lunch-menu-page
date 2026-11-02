@@ -53,7 +53,7 @@ function load({ thumbnail = (f) => blob('image/png', 2000), original = () => blo
     getId: () => f.id, getName: () => f.name, getMimeType: () => f.mimeType, getLastUpdated: () => new Date(f.updated),
     getThumbnail: () => thumbnail(f), getBlob: () => original(f)
   });
-  const files = FILE_NAMES.map(jpeg);
+  const state = { driveError, files: FILE_NAMES.map(jpeg) };
   const ctx = {
     console: { warn() {}, error() {} },
     CONFIG: { DISH_IMAGES_FOLDER_ID: 'folder' },
@@ -68,18 +68,18 @@ function load({ thumbnail = (f) => blob('image/png', 2000), original = () => blo
     DriveApp: {
       getFolderById: () => {
         calls.list++;
-        if (driveError) throw new Error(driveError);
+        if (state.driveError) throw new Error(state.driveError);
         let i = 0;
-        return { getFiles: () => ({ hasNext: () => i < files.length, next: () => fileFake(files[i++]) }) };
+        return { getFiles: () => ({ hasNext: () => i < state.files.length, next: () => fileFake(state.files[i++]) }) };
       },
-      getFileById: (id) => { calls.file++; return fileFake(files.find((f) => f.id === id)); }
+      getFileById: (id) => { calls.file++; return fileFake(state.files.find((f) => f.id === id)); }
     }
   };
   vm.createContext(ctx);
   for (const f of ['Logic.js', 'Images.js']) {
     vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'src', f), 'utf8'), ctx, { filename: f });
   }
-  return { ctx, calls };
+  return { ctx, calls, state, store };
 }
 const blob = (type, size) => ({ getContentType: () => type, getBytes: () => new Array(size).fill(65) });
 
@@ -107,6 +107,42 @@ test('without a thumbnail a small original is used; an oversized one keeps the p
   assert.equal(huge.ctx.dishImageUrls_(['Phở bò'])['Phở bò'], undefined);
   const throwing = load({ thumbnail: () => { throw new Error('no thumbnail'); } });
   assert.match(throwing.ctx.dishImageUrls_(['Phở bò'])['Phở bò'], /^data:image\/jpeg;base64,/);
+});
+
+test('a permission error is not cached: images appear on the next load after approval', () => {
+  const { ctx, state, store } = load({ driveError: 'You do not have permission to call DriveApp.getFolderById' });
+  assert.equal(ctx.dishImageUrls_(['Phở bò'])['Phở bò'], undefined);
+  assert.deepEqual(store, {}, 'nothing cached after a failed read');
+  state.driveError = null;
+  assert.match(ctx.dishImageUrls_(['Phở bò'])['Phở bò'], /^data:image\//);
+});
+
+test('an empty folder read is not cached: a new file is found on the next load', () => {
+  const { ctx, state, store } = load();
+  const files = state.files;
+  state.files = [];
+  assert.equal(ctx.dishImageUrls_(['Phở bò'])['Phở bò'], undefined);
+  assert.deepEqual(store, {}, 'nothing cached after an empty read');
+  state.files = files;
+  assert.match(ctx.dishImageUrls_(['Phở bò'])['Phở bò'], /^data:image\//);
+});
+
+test('an empty file is not cached or sent as an image', () => {
+  const empty = () => blob('image/jpeg', 0);
+  const { ctx, store } = load({ thumbnail: empty, original: empty });
+  assert.equal(ctx.dishImageUrls_(['Phở bò'])['Phở bò'], undefined);
+  assert.deepEqual(Object.keys(store).filter((k) => k.startsWith('dishImage:')), []);
+});
+
+test('one image failing is not cached and does not affect the others', () => {
+  const { ctx, store } = load({
+    thumbnail: (f) => { if (f.name.includes('Pho-bo')) throw new Error('x'); return blob('image/png', 2000); },
+    original: (f) => { if (f.name.includes('Pho-bo')) throw new Error('read failed'); return blob('image/jpeg', 70000); }
+  });
+  const urls = ctx.dishImageUrls_(['Phở bò', 'Bún cá']);
+  assert.equal(urls['Phở bò'], undefined);
+  assert.match(urls['Bún cá'], /^data:image\//);
+  assert.equal(Object.keys(store).filter((k) => k.startsWith('dishImage:')).length, 1);
 });
 
 test('a Drive problem leaves placeholders and does not stop the page', () => {

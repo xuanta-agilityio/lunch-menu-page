@@ -45,7 +45,8 @@ clasp update-deployment AKfycbyZF5Mp6olm3c0PCO553KsXiSxxJ4bXAz4kmLdGdv1L0ExIIZsc
 Each main dish and holiday has an image slot, which shows a placeholder when there is no image.
 
 - **Main dishes:** add a JPG, PNG or WebP to the private Drive folder `CONFIG.DISH_IMAGES_FOLDER_ID`, named `DD-MM_Dish-name.jpg`. Files match the main dish by name, ignoring the date prefix, accents and case, so a repeated dish reuses its image. If two files match, the first by file name is used. No redeploy is needed: a new file appears within about 10 minutes, and a changed file gets picked up the same way.
-- **How they reach the page:** [src/Images.js](src/Images.js) reads Drive's thumbnail (or the original if it's 120 KB or less and has no thumbnail) and sends it as a data URI. Nothing is made public. Results are cached for up to 6 hours. If Drive fails, the page still loads with placeholders and the error goes to the Apps Script executions log.
+- **How they reach the page:** [src/Images.js](src/Images.js) reads Drive's thumbnail (or the original if it's 120 KB or less and has no thumbnail) and sends it as a data URI. Nothing is made public. Results are cached for up to 6 hours. Failed or empty Drive reads are never cached. If Drive fails, the page still loads with placeholders and the error goes to the Apps Script executions log, where the run still shows "Completed", so expand it to see the error.
+- **Drive permission:** the page doesn't prompt for a new permission. If the log says `You do not have permission to call DriveApp`, run `checkDishImages` from the Apps Script editor and approve the prompt.
 - **Holidays:** fill `IMAGES.holidays` in [src/Config.js](src/Config.js). The keys are the holiday name in lower case with single spaces, and the values are image URLs.
 
 ## Testing the 11:00 boundaries
