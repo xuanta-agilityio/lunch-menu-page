@@ -64,7 +64,7 @@ Test cases for the ticket Doc, grouped by area and traced to AC1–AC20. Result 
 
 | TC | Role | Action | Expected | AC | Result |
 | --- | --- | --- | --- | --- | --- |
-| R01 | Signed out | Open the public page | Menu and like/dislike counts shown, vote icons disabled, no meal counts, Sign in button at top left | AC15 | Not run |
+| R01 | Signed out | Open the public page | Menu and like/dislike counts shown, vote icons disabled, no meal counts, Sign in button at top right | AC15 | Not run |
 | R02 | Signed out | Click Sign in, sign in with a company account | Page opens with the view for the user's role and voting works | AC15 | Not run |
 | R03 | Outside account | Try to sign in | Google shows no access for the company view; the public view still works without voting | AC15 | Not run |
 | R04 | Normal user | Sign in, open page | Menu, votes and like/dislike counts; no meal counts, no total | AC18 | Not run |
@@ -72,7 +72,7 @@ Test cases for the ticket Doc, grouped by area and traced to AC1–AC20. Result 
 | R06 | Normal user | Look for counts in the page source or network data | Counts are not sent to the browser | AC18 | Not run |
 | R07 | Admin | Click avatar → Sign out | Signed out of Google; reopening the page shows the public view with Sign in | AC15, AC20 | Not run |
 | R08 | Signed out | Click a vote icon on the public view; look for counts in the page source | No vote is saved; meal counts are not sent to the browser | AC15, AC18 | Not run |
-| R09 | Admin (xuan.tathanh) | Sign in, open page | Avatar "XT" at top left instead of Sign in; no name shown | AC20 | Not run |
+| R09 | Admin (xuan.tathanh) | Sign in, open page | Avatar "XT" at top right instead of Sign in; no name shown | AC20 | Not run |
 | R10 | Normal user (ni.ngo) | Sign in, click avatar | Avatar "NN"; menu opens with Sign out | AC20 | Not run |
 
 ## Group 5 – Voting (signed in, day = Mon 2 Nov)

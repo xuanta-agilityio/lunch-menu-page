@@ -108,7 +108,7 @@ Locations shown on the page: **604 Núi Thành** (VP 604 NT), **Trung Lương 18
 - **Given** a visitor is not signed in
 - **When** they open the public page
 - **Then** they see the menu and the like/dislike counts, with the vote icons disabled and no meal counts
-- **And** a **Sign in** button is shown at the top left
+- **And** a **Sign in** button is shown at the top right
 - **When** they click Sign in and sign in with a company Google account (@asnet.com.vn)
 - **Then** they see the page for their role (AC18) and can vote
 - **When** they try to sign in with an account outside the company domain
@@ -150,7 +150,7 @@ Locations shown on the page: **604 Núi Thành** (VP 604 NT), **Trung Lương 18
 ### AC20 – Avatar menu (added 2 Nov, phase 1)
 - **Given** xuan.tathanh@asnet.com.vn is signed in
 - **When** the page loads
-- **Then** a round avatar with the initials "XT" is shown at the top left, in place of the Sign in button, and no name is shown
+- **Then** a round avatar with the initials "XT" is shown at the top right, in place of the Sign in button, and no name is shown
 - **And** the initials are the first letters of the parts of the email name split by "." (xuan.tathanh → XT)
 - **When** they click the avatar
 - **Then** a menu opens with **Sign out**
