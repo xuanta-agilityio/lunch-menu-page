@@ -6,14 +6,8 @@ const path = require('path');
 const vm = require('vm');
 const L = require('../src/Logic.js');
 
-// The file names in the real Drive folder (20 files; none for 30/11).
-const FILE_NAMES = [
-  '02-11_Ca-chien-mam-xoai.jpg', '03-11_Thit-rang-tom.jpg', '04-11_Bun-ca.jpg', '05-11_Muc-xao-thom-ca.jpg',
-  '06-11_Com-ga-quay.jpg', '09-11_Suon-kho-dau-khuon.jpg', '10-11_Pho-bo.jpg', '11-11_Ca-kho-thom.jpg',
-  '12-11_Thit-xiu-mai-xot-ca.jpg', '13-11_Mi-quang-ca.jpg', '16-11_Dau-khuon-nhoi-thit.jpg', '17-11_Ca-kho-to.jpg',
-  '18-11_Bun-gio.jpg', '19-11_Ga-xao-sa-ot.jpg', '20-11_Com-tam.jpg', '23-11_Ca-chien.jpg', '24-11_Mien-luon.jpg',
-  '25-11_Thit-heo-quay.jpg', '26-11_Ca-kho-to.jpg', '27-11_Hu-tieu-muc.jpg'
-];
+const { IMAGE_FILES: FILE_NAMES } = require('./helpers/fixtures.js');
+
 // The main dishes in menu tab 11/2026, spelled as in the sheet (some end with a space).
 const MAIN_DISHES = [
   'Cá chiên mắm xoài', 'Thịt rang tôm', 'Bún cá', 'Mực xào thơm cà', 'Cơm gà quay', 'Sườn kho đậu khuôn', 'Phở bò',

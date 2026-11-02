@@ -34,6 +34,15 @@ test('V02: Mon 2 Nov 11:00 like works, like +1', () => {
   const app = openApp();
   assert.deepEqual(app.vote(MON, 'like'), { like: 1, dislike: 0, mine: 'like' });
   assert.deepEqual(votesOn(app, MON), { like: 1, dislike: 0, mine: 'like' });
+  assert.equal(app.voteRows()[0][0], MON, 'the date is stored as text, not converted to a date');
+});
+
+test('V03 (date-typed row): a row stored as a date cell is found, counted and toggled off in place', () => {
+  const app = createApp({ votes: [[MON, USER, 'like', false]] }).as(USER, '2026-11-02T11:00');
+  assert.deepEqual(votesOn(app, MON), { like: 1, dislike: 0, mine: 'like' });
+  assert.deepEqual(app.vote(MON, 'like'), { like: 0, dislike: 0, mine: '' });
+  assert.deepEqual(votesOn(app, MON), { like: 0, dislike: 0, mine: '' });
+  assert.equal(app.voteRows().length, 1);
 });
 
 test('V03: clicking like again removes the vote, like -1, no active vote', () => {
@@ -69,6 +78,7 @@ test('V06: like while disliked, dislike -1, like +1', () => {
 test('V07: Tue 3 Nov 10:59 a vote for 2 Nov still works', () => {
   const app = createApp().as(USER, '2026-11-03T10:59');
   assert.deepEqual(app.vote(MON, 'like'), { like: 1, dislike: 0, mine: 'like' });
+  assert.deepEqual(votesOn(app, MON), { like: 1, dislike: 0, mine: 'like' }, 'the vote was saved');
 });
 
 test('V08 (server): Tue 3 Nov 11:00 refuses a vote for 2 Nov, counts unchanged', () => {
@@ -124,6 +134,21 @@ test('V13 (server): two vote calls in a row count once, then toggle off, never +
   assert.equal(second.like, 0);
   assert.equal(votesOn(app, MON).like, 0);
   assert.equal(app.voteRows().length, 1);
+});
+
+test('V13 (server): each vote reads and writes the sheet only while holding the lock', () => {
+  const app = openApp();
+  for (const clicked of ['like', 'like', 'dislike']) {
+    app.clearVoteLog();
+    app.vote(MON, clicked);
+    const log = app.voteLog();
+    assert.equal(log[0], 'lock', 'the lock is taken before the sheet is touched');
+    assert.equal(log[log.length - 1], 'unlock', 'the lock is released last');
+    const inside = log.slice(1, -1);
+    assert.ok(!inside.includes('lock') && !inside.includes('unlock'), 'one continuous lock');
+    assert.ok(inside.includes('read') && inside.includes('write'));
+    assert.ok(inside.indexOf('read') < inside.indexOf('write'), 'the existing vote is read before writing');
+  }
 });
 
 test('V13 (page): a double click before the server responds sends one vote and counts +1', () => {

@@ -1,12 +1,12 @@
-// Runs the real src/Votes.js against an in-memory fake of the votes sheet that,
-// like Google Sheets, turns the text "2026-11-02" into a date on appendRow
-// (and optionally on setValues). Covers QA bugs #13 and #14.
+// Runs the real src/Votes.js against the shared fake votes sheet, which treats date
+// text the way Google Sheets does (see helpers/votes-sheet.js). Covers QA bugs #13 and #14.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
 const L = require('../src/Logic.js');
+const { fakeVotesSheet } = require('./helpers/votes-sheet.js');
 
 const ADMIN = 'xuan.tathanh@asnet.com.vn';
 const USER = 'nguyen.van.a@asnet.com.vn';
@@ -14,38 +14,7 @@ const DAY = '2026-11-02';
 
 // A date-only cell as Sheets returns it: midnight in the sheet's time zone.
 const asDate = (key) => new Date(L.vnInstant(key, 0));
-const looksLikeDate = (v) => typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v);
-
-function fakeSheet(rows, { convertOnSetValues = false } = {}) {
-  const cells = rows.map((r) => r.slice());
-  const formats = {}; // "row,col" -> '@'
-  const toCell = (v, row, col, convert) =>
-    convert && looksLikeDate(v) && (formats[row + ',' + col] !== '@' || convertOnSetValues === 'always')
-      ? asDate(v) : v;
-  const display = (v) => (v instanceof Date ? L.dateKeyOf(v.getTime()) : v === true ? 'TRUE' : v === false ? 'FALSE' : String(v ?? ''));
-  const range = (row, col, nr, nc) => ({
-    getValues: () => Array.from({ length: nr }, (_, i) => Array.from({ length: nc }, (_, j) => (cells[row - 1 + i] || [])[col - 1 + j] ?? '')),
-    getDisplayValues() { return this.getValues().map((r) => r.map(display)); },
-    setValues(vals) {
-      vals.forEach((r, i) => r.forEach((v, j) => {
-        const R = row + i, C = col + j;
-        (cells[R - 1] ||= [])[C - 1] = toCell(v, R, C, convertOnSetValues);
-      }));
-      return this;
-    },
-    setNumberFormat(f) { for (let i = 0; i < nr; i++) for (let j = 0; j < nc; j++) formats[(row + i) + ',' + (col + j)] = f; return this; },
-    setFontWeight() { return this; }
-  });
-  const sheet = {
-    cells,
-    getLastRow: () => cells.length,
-    getRange: (row, col, nr = 1, nc = 1) => range(row, col, nr, nc),
-    // Sheets ignores the text format here and converts the date (the original bug).
-    appendRow: (vals) => { cells.push(vals.map((v) => (looksLikeDate(v) ? asDate(v) : v))); },
-    getParent: () => ({ getSpreadsheetTimeZone: () => 'Asia/Ho_Chi_Minh' })
-  };
-  return sheet;
-}
+const fakeSheet = (rows, options = {}) => fakeVotesSheet(rows, { asDate, ...options });
 
 function load(sheet) {
   const ctx = {
@@ -71,11 +40,11 @@ const tally = (ctx, email, testMode) =>
   ctx.tallyVotes(ctx.readVoteRows_(ctx.votesSheet_()), [DAY], email, testMode)[DAY];
 const plain = (o) => JSON.parse(JSON.stringify(o));
 
-for (const convertOnSetValues of [false, 'always']) {
-  const label = convertOnSetValues ? ' (even if setValues converts dates)' : '';
+for (const alwaysConvert of [false, true]) {
+  const label = alwaysConvert ? ' (even if setValues converts dates)' : '';
 
   test('#13: clicking like again removes the vote; one row per user per day' + label, () => {
-    const sheet = fakeSheet([HEADER], { convertOnSetValues });
+    const sheet = fakeSheet([HEADER], { alwaysConvert });
     const ctx = load(sheet);
     assert.deepEqual(plain(ctx.applyVote_(DAY, USER, 'like', false)), { like: 1, dislike: 0, mine: 'like' });
     assert.deepEqual(plain(ctx.applyVote_(DAY, USER, 'like', false)), { like: 0, dislike: 0, mine: '' });
@@ -85,7 +54,7 @@ for (const convertOnSetValues of [false, 'always']) {
   });
 
   test('#14: counts and own vote survive a reload' + label, () => {
-    const sheet = fakeSheet([HEADER], { convertOnSetValues });
+    const sheet = fakeSheet([HEADER], { alwaysConvert });
     let ctx = load(sheet);
     ctx.applyVote_(DAY, USER, 'like', false);
     ctx.applyVote_(DAY, ADMIN, 'dislike', false);

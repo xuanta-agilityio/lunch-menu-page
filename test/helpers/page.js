@@ -49,17 +49,26 @@ class FakeElement {
   }
 }
 
-const PAGE_IDS = ['test-banner', 'range', 'error', 'week', 'counts', 'counts-table', 'toast'];
+const readSource = (name) => fs.readFileSync(path.join(__dirname, '..', '..', 'src', name), 'utf8');
 
 function pageScript() {
-  const html = fs.readFileSync(path.join(__dirname, '..', '..', 'src', 'Script.html'), 'utf8');
-  return /<script>([\s\S]*)<\/script>/.exec(html)[1];
+  return /<script>([\s\S]*)<\/script>/.exec(readSource('Script.html'))[1];
+}
+
+/** The elements with an id in the real src/Index.html, so markup changes reach the tests. */
+function pageElements() {
+  const elements = {};
+  for (const [tagHtml, tag, id] of readSource('Index.html').matchAll(/<(\w+)\b[^>]*\bid="([^"]+)"[^>]*>/g)) {
+    const element = new FakeElement(tag);
+    element.hidden = /\shidden\b/.test(tagHtml);
+    elements[id] = element;
+  }
+  return elements;
 }
 
 /** Renders the page from server data (what doGet embeds as INITIAL). */
 function renderPage(week) {
-  const elements = Object.fromEntries(PAGE_IDS.map((id) => [id, new FakeElement('div')]));
-  elements['counts-table'].tag = 'table';
+  const elements = pageElements();
   const queue = [];
 
   const run = () => {
@@ -81,7 +90,10 @@ function renderPage(week) {
     setInterval: () => 0,
     document: {
       hidden: false,
-      getElementById: (id) => elements[id],
+      getElementById: (id) => {
+        if (!elements[id]) throw new Error(`src/Index.html has no element with id="${id}"`);
+        return elements[id];
+      },
       createElement: (tag) => new FakeElement(tag),
       addEventListener() {}
     },

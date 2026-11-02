@@ -5,6 +5,7 @@ const path = require('path');
 const vm = require('vm');
 const L = require('../../src/Logic.js');
 const { menuNovember, signupNovember, IMAGE_FILES } = require('./fixtures.js');
+const { fakeVotesSheet } = require('./votes-sheet.js');
 
 const ADMIN = 'xuan.tathanh@asnet.com.vn';
 const USER = 'normal.user@asnet.com.vn';
@@ -15,8 +16,13 @@ const MENU_ID = '1Dw9jGlMDs9iUY_zrgVEfpfaGV8L17B5M1ix1HooRh2g';
 const SIGNUP_ID = '1kuW7OIoI1i7xL77jOdcXqijWGkx4ELkI4HEPVjD6T-Q';
 const VOTES_ID = 'fake-votes-sheet';
 
+const VOTE_HEADER = ['date', 'email', 'vote', 'isTest', 'updatedAt'];
+const SRC_DIR = path.join(__dirname, '..', '..', 'src');
+
+const EMBEDDED_DATA = /var INITIAL = (.*?);<\/script>/s;
+
 const plain = (o) => JSON.parse(JSON.stringify(o));
-const looksLikeDateKey = (v) => typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v);
+const readSourceHtml = (name) => fs.readFileSync(path.join(SRC_DIR, name + '.html'), 'utf8');
 
 /** A source sheet tab: reading works, and any other call fails the test. */
 function sourceSheet(values) {
@@ -29,39 +35,8 @@ function sourceSheet(values) {
   });
 }
 
-/** The votes sheet. Like Google Sheets, appendRow turns the text "2026-11-02" into a date. */
-function votesSheet(asDate) {
-  const cells = [['date', 'email', 'vote', 'isTest', 'updatedAt']];
-  const display = (v) => {
-    if (v && typeof v.getTime === 'function') return L.dateKeyOf(v.getTime());
-    if (v === true) return 'TRUE';
-    if (v === false) return 'FALSE';
-    return String(v ?? '');
-  };
-  const range = (row, col, rows, cols) => {
-    const read = () => Array.from({ length: rows }, (_, i) =>
-      Array.from({ length: cols }, (_, j) => (cells[row - 1 + i] || [])[col - 1 + j] ?? ''));
-    return {
-      getValues: read,
-      getDisplayValues: () => read().map((r) => r.map(display)),
-      setValues(values) {
-        values.forEach((r, i) => r.forEach((v, j) => { (cells[row - 1 + i] ||= [])[col - 1 + j] = v; }));
-        return this;
-      },
-      setNumberFormat() { return this; }
-    };
-  };
-  return {
-    cells,
-    getLastRow: () => cells.length,
-    getRange: (row, col, rows = 1, cols = 1) => range(row, col, rows, cols),
-    appendRow: (values) => { cells.push(values.map((v) => (looksLikeDateKey(v) ? asDate(v) : v))); },
-    getParent: () => ({ getSpreadsheetTimeZone: () => 'Asia/Ho_Chi_Minh' })
-  };
-}
-
 /** Thumbnails hold their file name, so a test can tell which image reached the page. */
-function fakeDrive(state) {
+function fakeDrive() {
   const files = IMAGE_FILES.map((name, i) => ({ id: 'file-' + i, name }));
   const blob = (name) => ({ getContentType: () => 'image/jpeg', getBytes: () => Array.from(Buffer.from(name)) });
   return {
@@ -82,7 +57,6 @@ function fakeDrive(state) {
     Drive: { Files: { get: (id) => ({ thumbnailLink: 'https://lh3.googleusercontent.com/' + id + '=s220' }) } },
     UrlFetchApp: {
       fetch: (url) => {
-        state.imageFetches++;
         const id = /googleusercontent\.com\/(.+)=s256$/.exec(url)[1];
         return { getResponseCode: () => 200, getBlob: () => blob(files.find((f) => f.id === id).name) };
       }
@@ -92,17 +66,24 @@ function fakeDrive(state) {
 
 /**
  * The app with fake Google services. Pass `menu` / `signup` as { tabName: rows };
- * by default only the November tabs exist, as in the real sheets.
+ * by default only the November tabs exist, as in the real sheets. `votes` seeds the
+ * votes sheet with [dateKey, email, vote, isTest] rows, stored as date cells, as
+ * Sheets stored the rows written before the #13/#14 fix.
  */
-function createApp({ menu = { '11/2026': menuNovember() }, signup = { '2026-11': signupNovember() } } = {}) {
-  const state = { email: ADMIN, now: 0, opened: [], imageFetches: 0, template: null };
+function createApp({ menu = { '11/2026': menuNovember() }, signup = { '2026-11': signupNovember() }, votes: seedVotes = [] } = {}) {
+  const state = { email: ADMIN, now: 0, opened: [], template: null, html: null, voteLog: [] };
   const cacheStore = {};
 
   const ctx = {
     console: { log() {}, warn() {}, error() {} },
     Session: { getActiveUser: () => ({ getEmail: () => state.email }) },
     PropertiesService: { getScriptProperties: () => ({ getProperty: () => VOTES_ID, setProperty() {} }) },
-    LockService: { getScriptLock: () => ({ waitLock() {}, releaseLock() {} }) },
+    LockService: {
+      getScriptLock: () => ({
+        waitLock() { state.voteLog.push('lock'); },
+        releaseLock() { state.voteLog.push('unlock'); }
+      })
+    },
     CacheService: {
       getScriptCache: () => ({
         get: (k) => cacheStore[k] ?? null,
@@ -116,20 +97,29 @@ function createApp({ menu = { '11/2026': menuNovember() }, signup = { '2026-11':
       formatDate: (d) => L.dateKeyOf(d.getTime())
     },
     HtmlService: {
-      createTemplateFromFile: () => {
-        state.template = {
-          evaluate: () => ({ setTitle() { return this; }, addMetaTag() { return this; } })
+      createHtmlOutputFromFile: (name) => ({ getContent: () => readSourceHtml(name) }),
+      // Renders the real template: <?!= expression ?> is evaluated with the template's variables.
+      createTemplateFromFile: (name) => {
+        const template = {
+          evaluate: () => {
+            state.html = readSourceHtml(name).replace(/<\?!?=\s*(.+?)\s*\?>/g, (_, expr) =>
+              String(vm.runInContext(`(function (t) { with (t) { return (${expr}); } })`, ctx)(template)));
+            return { setTitle() { return this; }, addMetaTag() { return this; } };
+          }
         };
-        return state.template;
+        state.template = template;
+        return template;
       }
     },
-    ...fakeDrive(state)
+    ...fakeDrive()
   };
   vm.createContext(ctx);
   ctx.currentTime = () => state.now;
   vm.runInContext('Date.now = function () { return currentTime(); };', ctx);
   const VmDate = vm.runInContext('Date', ctx);
-  const votes = votesSheet((key) => new VmDate(L.vnInstant(key, 0)));
+  const asDate = (key) => new VmDate(L.vnInstant(key, 0));
+  const seededRows = seedVotes.map(([date, email, vote, isTest]) => [asDate(date), email, vote, isTest, new VmDate(1000)]);
+  const votes = fakeVotesSheet([VOTE_HEADER, ...seededRows], { asDate, onAccess: (kind) => state.voteLog.push(kind) });
 
   ctx.SpreadsheetApp = {
     openById: (id) => {
@@ -142,7 +132,7 @@ function createApp({ menu = { '11/2026': menuNovember() }, signup = { '2026-11':
   };
 
   for (const file of SOURCE_FILES) {
-    vm.runInContext(fs.readFileSync(path.join(__dirname, '..', '..', 'src', file), 'utf8'), ctx, { filename: file });
+    vm.runInContext(fs.readFileSync(path.join(SRC_DIR, file), 'utf8'), ctx, { filename: file });
   }
 
   const app = {
@@ -160,17 +150,24 @@ function createApp({ menu = { '11/2026': menuNovember() }, signup = { '2026-11':
     },
     getWeek: (nowParam) => plain(ctx.getWeek(nowParam)),
     vote: (date, clicked, nowParam) => plain(ctx.vote(date, clicked, nowParam)),
-    /** Runs doGet and returns the JSON text embedded in the page, plus its parsed data. */
+    /** Runs doGet and returns the rendered page, plus the data embedded in it. */
     doGet: (parameter = {}) => {
       ctx.doGet({ parameter });
-      return { raw: state.template.initialJson, data: JSON.parse(state.template.initialJson) };
+      const embedded = EMBEDDED_DATA.exec(state.html);
+      if (!embedded) throw new Error('No embedded data in the page');
+      return {
+        html: state.html,
+        htmlWithoutData: state.html.replace(EMBEDDED_DATA, 'var INITIAL = null;'),
+        data: JSON.parse(embedded[1])
+      };
     },
     /** One day's card from the week shown now. */
     day: (date) => app.getWeek().days.find((d) => d.date === date),
     /** Data rows in the votes sheet. */
     voteRows: () => votes.cells.slice(1),
-    /** Forgets which sheets were opened so far. */
-    clearOpened: () => { state.opened.length = 0; },
+    /** Lock and votes-sheet events ('lock', 'read', 'write', 'unlock') in order. */
+    voteLog: () => state.voteLog.slice(),
+    clearVoteLog: () => { state.voteLog.length = 0; },
     openedSignupSheet: () => state.opened.includes(SIGNUP_ID)
   };
   return app;

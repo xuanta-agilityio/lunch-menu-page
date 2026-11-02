@@ -14,6 +14,8 @@ const NOT_COUNTS = new Set(['nowMs', 'nextRefreshMs']);
 /** Every key and every number anywhere in a response, as the browser would receive it. */
 function scan(value, found = { keys: new Set(), numbers: new Set() }, key = '') {
   if (typeof value === 'number' && !NOT_COUNTS.has(key)) found.numbers.add(value);
+  // A count sent as text, such as "90", is still a count.
+  if (typeof value === 'string' && /^\d+$/.test(value.trim())) found.numbers.add(Number(value));
   if (value && typeof value === 'object') {
     for (const [k, v] of Object.entries(value)) {
       if (!Array.isArray(value)) found.keys.add(k);
@@ -74,10 +76,26 @@ test('R06 (server): getWeek for a normal user sends no meal counts or total', ()
 });
 
 test('R06 (server): the data embedded in the page source for a normal user has no meal counts or total', () => {
-  const { raw, data } = createApp().as(USER, MON_2_NOV).doGet();
+  const { data } = createApp().as(USER, MON_2_NOV).doGet();
   assert.equal(data.error, undefined);
+  assert.equal(data.days.length, 5);
   assertNoCounts(data);
-  COUNT_FIELDS.forEach((f) => assert.equal(raw.includes(`"${f}"`), false, `"${f}" is in the page source`));
+});
+
+test('R06 (server): the rendered page source differs between normal user and admin only in the embedded data', () => {
+  const app = createApp();
+  const user = app.as(USER, MON_2_NOV).doGet();
+  const admin = app.as(ADMIN).doGet();
+  assert.equal(user.htmlWithoutData, admin.htmlWithoutData);
+  assert.doesNotMatch(user.html, /<\?/, 'every template tag was rendered');
+  assert.notEqual(user.html, admin.html, 'the admin page does carry more data');
+});
+
+test('R06 (scan check): the count scan catches counts under unknown field names, as numbers or text', () => {
+  assert.throws(() => assertNoCounts({ meals: { a: 90 } }), /value 90/);
+  assert.throws(() => assertNoCounts({ meals: { a: '108' } }), /value 108/);
+  assert.throws(() => assertNoCounts({ total: null }), /field "total"/);
+  assert.doesNotThrow(() => assertNoCounts({ nowMs: 90, votes: { like: 1 }, date: '2026-11-02' }));
 });
 
 test('R06 (server): the sign-up sheet is not even opened for a normal user', () => {
